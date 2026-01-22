@@ -1,0 +1,360 @@
+#!/usr/bin/env python3
+"""
+Run a crawl, download discovered documents, and OCR scanned pages via VLMs.
+
+Defaults:
+- Crawl via API on localhost:8000
+- Download PDFs only
+- OCR with OpenAI (primary) and Gemini (fallback)
+
+Examples:
+  .venv/bin/python scripts/run_crawl_and_vlm_ocr.py \\
+    --query "SEA CSEC CXC past papers and official PDFs" \\
+    --targets https://www.cxc.org/examinations/ https://storage.moe.gov.tt/ https://moe.gov.tt/sea-2026-registration-for-private-candidates/ \\
+    --file-types pdf doc docx \\
+    --max-docs 1000 \\
+    --max-ocr-pages 150 \\
+    --ocr-provider hybrid
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import re
+import time
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import fitz
+import httpx
+from PIL import Image
+
+API_BASE = os.getenv("GENCRAWL_API", "http://localhost:8000/api/v1")
+
+
+def slugify(text: str) -> str:
+    text = re.sub(r"[^a-zA-Z0-9._-]+", "_", text)
+    return text.strip("_") or "document"
+
+
+def submit_crawl(query: str, targets: List[str], file_types: List[str], max_docs: int) -> Dict[str, str]:
+    payload = {
+        "query": query,
+        "output_format": "pretraining",
+        "strategy": "sitemap",
+        "crawler": "scrapy",
+        "file_types": file_types or None,
+        "targets": targets or None,
+        "limits": {
+            "max_documents": max_docs,
+            "max_sitemaps": 200,
+            "max_sitemap_urls": 3000,
+            "max_page_scans": 400,
+            "max_wp_media_pages": 15,
+            "max_wp_media_items": 2000,
+        },
+        "respect_robots_txt": True,
+    }
+    with httpx.Client(timeout=60) as client:
+        resp = client.post(f"{API_BASE}/crawl", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+def wait_for_completion(crawl_id: str, timeout_s: int = 900) -> Dict[str, str]:
+    deadline = time.time() + timeout_s
+    last_status = None
+    while time.time() < deadline:
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(f"{API_BASE}/crawls/{crawl_id}/status")
+            if resp.status_code == 404:
+                # Fallback endpoint if needed
+                resp = client.get(f"{API_BASE}/crawl/{crawl_id}/status")
+            resp.raise_for_status()
+            status = resp.json().get("status")
+        if status != last_status:
+            print(f"[crawl] status={status}")
+            last_status = status
+        if status in ("completed", "failed", "cancelled"):
+            return resp.json()
+        time.sleep(5)
+    raise TimeoutError(f"Crawl {crawl_id} did not finish within {timeout_s}s")
+
+
+def fetch_documents(crawl_id: str, limit: int) -> List[Dict[str, str]]:
+    with httpx.Client(timeout=30) as client:
+        resp = client.get(f"{API_BASE}/documents/{crawl_id}", params={"limit": limit})
+        resp.raise_for_status()
+        return resp.json().get("documents", [])
+
+
+def download_document(url: str, out_dir: Path, index: int) -> Optional[Path]:
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.get(url)
+            if resp.status_code != 200:
+                return None
+            filename = slugify(Path(url.split("?", 1)[0]).name)
+            if not filename:
+                filename = f"document_{index}.pdf"
+            if not Path(filename).suffix:
+                # Guess pdf if content-type suggests
+                content_type = resp.headers.get("content-type", "")
+                ext = ".pdf" if "pdf" in content_type else ""
+                filename += ext
+            out_path = out_dir / f"{index:04d}_{filename}"
+            out_path.write_bytes(resp.content)
+            return out_path
+    except httpx.RequestError:
+        return None
+
+
+def extract_text_layer(page: fitz.Page, min_chars: int) -> Optional[str]:
+    text = page.get_text("text").strip()
+    if len(text) >= min_chars:
+        return text
+    return None
+
+
+def ocr_openai(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
+    with image_path.open("rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a document OCR engine. Return only JSON."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Extract OCR text and structured fields. "
+                            "Return JSON with keys: text, fields (array of {label,value}), headings (array)."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"},
+                    },
+                ],
+            },
+        ],
+        "temperature": 0,
+        "max_tokens": 800,
+    }
+    with httpx.Client(timeout=60) as client:
+        resp = client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            content=json.dumps(payload),
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"].strip()
+    return {"provider": "openai", "raw": content}
+
+
+def ocr_gemini(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
+    with image_path.open("rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": (
+                            "Extract OCR text and structured fields. "
+                            "Return JSON with keys: text, fields (array of {label,value}), headings (array)."
+                        )
+                    },
+                    {"inline_data": {"mime_type": "image/png", "data": b64}},
+                ],
+            }
+        ],
+        "generationConfig": {"temperature": 0, "maxOutputTokens": 800},
+    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    with httpx.Client(timeout=60) as client:
+        resp = client.post(url, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        content = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    return {"provider": "gemini", "raw": content}
+
+
+def parse_json_maybe(raw: str) -> object:
+    if "```json" in raw:
+        raw = raw.split("```json", 1)[1].split("```", 1)[0].strip()
+    elif "```" in raw:
+        raw = raw.split("```", 1)[1].split("```", 1)[0].strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"text": raw}
+
+
+def ocr_page(
+    image_path: Path,
+    provider: str,
+    openai_key: Optional[str],
+    gemini_key: Optional[str],
+    openai_model: str,
+    gemini_model: str,
+) -> Dict[str, object]:
+    if provider in ("openai", "hybrid") and openai_key:
+        try:
+            result = ocr_openai(image_path, openai_model, openai_key)
+            result["parsed"] = parse_json_maybe(result["raw"])
+            return result
+        except Exception as exc:
+            if provider != "hybrid":
+                return {"provider": "openai", "error": str(exc)}
+    if provider in ("gemini", "hybrid") and gemini_key:
+        try:
+            result = ocr_gemini(image_path, gemini_model, gemini_key)
+            result["parsed"] = parse_json_maybe(result["raw"])
+            return result
+        except Exception as exc:
+            return {"provider": "gemini", "error": str(exc)}
+    return {"provider": provider, "error": "No provider key available"}
+
+
+def run_ocr_on_pdf(
+    pdf_path: Path,
+    out_dir: Path,
+    provider: str,
+    openai_key: Optional[str],
+    gemini_key: Optional[str],
+    openai_model: str,
+    gemini_model: str,
+    min_text_chars: int,
+    max_pages_total: Optional[int],
+    page_counter: List[int],
+) -> Dict[str, object]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open(pdf_path)
+    pages_out: List[Dict[str, object]] = []
+    for page_index in range(doc.page_count):
+        if max_pages_total and page_counter[0] >= max_pages_total:
+            break
+        page = doc.load_page(page_index)
+        text_layer = extract_text_layer(page, min_text_chars)
+        if text_layer:
+            pages_out.append(
+                {
+                    "page": page_index + 1,
+                    "method": "text-layer",
+                    "text": text_layer,
+                }
+            )
+            continue
+
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        image_path = out_dir / f"{pdf_path.stem}_page{page_index + 1}.png"
+        pix.save(image_path)
+
+        ocr_result = ocr_page(
+            image_path=image_path,
+            provider=provider,
+            openai_key=openai_key,
+            gemini_key=gemini_key,
+            openai_model=openai_model,
+            gemini_model=gemini_model,
+        )
+        pages_out.append(
+            {
+                "page": page_index + 1,
+                "method": ocr_result.get("provider"),
+                "result": ocr_result.get("parsed") or ocr_result,
+            }
+        )
+        page_counter[0] += 1
+    return {"pages": pages_out, "page_count": doc.page_count}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--query", required=True)
+    parser.add_argument("--targets", nargs="*", default=[])
+    parser.add_argument("--file-types", nargs="*", default=["pdf"])
+    parser.add_argument("--max-docs", type=int, default=1000)
+    parser.add_argument("--max-ocr-pages", type=int, default=150)
+    parser.add_argument("--min-text-chars", type=int, default=120)
+    parser.add_argument("--ocr-provider", choices=["openai", "gemini", "hybrid"], default="hybrid")
+    parser.add_argument("--openai-model", default=os.getenv("OPENAI_OCR_MODEL", "gpt-4o-mini"))
+    parser.add_argument("--gemini-model", default=os.getenv("GEMINI_OCR_MODEL", "gemini-2.0-flash"))
+    args = parser.parse_args()
+
+    openai_key = os.getenv("OPENAI_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+    print("[crawl] submitting request...")
+    crawl = submit_crawl(args.query, args.targets, args.file_types, args.max_docs)
+    crawl_id = crawl.get("crawl_id")
+    print(f"[crawl] crawl_id={crawl_id}")
+
+    wait_for_completion(crawl_id)
+
+    print("[crawl] fetching discovered documents...")
+    documents = fetch_documents(crawl_id, args.max_docs)
+    print(f"[crawl] discovered={len(documents)}")
+
+    raw_dir = Path("data") / "ingestion" / crawl_id / "raw"
+    ocr_dir = Path("data") / "ingestion" / crawl_id / "ocr"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    ocr_dir.mkdir(parents=True, exist_ok=True)
+
+    downloaded: List[Tuple[str, Path]] = []
+    for idx, doc in enumerate(documents, start=1):
+        url = doc.get("url") or ""
+        if not url.lower().startswith("http"):
+            continue
+        if args.file_types and not any(url.lower().endswith(ft) for ft in args.file_types):
+            continue
+        path = download_document(url, raw_dir, idx)
+        if path:
+            downloaded.append((url, path))
+
+    print(f"[download] saved={len(downloaded)}")
+
+    page_counter = [0]
+    for url, pdf_path in downloaded:
+        if args.max_ocr_pages and page_counter[0] >= args.max_ocr_pages:
+            break
+        if pdf_path.suffix.lower() != ".pdf":
+            continue
+        result = run_ocr_on_pdf(
+            pdf_path=pdf_path,
+            out_dir=ocr_dir,
+            provider=args.ocr_provider,
+            openai_key=openai_key,
+            gemini_key=gemini_key,
+            openai_model=args.openai_model,
+            gemini_model=args.gemini_model,
+            min_text_chars=args.min_text_chars,
+            max_pages_total=args.max_ocr_pages,
+            page_counter=page_counter,
+        )
+        out_file = ocr_dir / f"{pdf_path.stem}.json"
+        out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
+        print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
+
+    summary = {
+        "crawl_id": crawl_id,
+        "documents_found": len(documents),
+        "documents_downloaded": len(downloaded),
+        "ocr_pages_processed": page_counter[0],
+        "ocr_provider": args.ocr_provider,
+        "openai_model": args.openai_model,
+        "gemini_model": args.gemini_model,
+    }
+    (ocr_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    print("[done] summary written to", ocr_dir / "summary.json")
+
+
+if __name__ == "__main__":
+    main()
