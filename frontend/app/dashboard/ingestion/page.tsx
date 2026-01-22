@@ -9,6 +9,7 @@ import {
   FileText,
   ExternalLink,
   Search,
+  Layers,
 } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
 import { crawlsApi, ingestApi, ApiError, CrawlSummary, IngestDocument, IngestStatusResponse } from '@/lib/api/client'
@@ -71,6 +72,8 @@ export default function IngestionPage() {
   const [sortKey, setSortKey] = useState('source_date_desc')
   const [pageSize, setPageSize] = useState(25)
   const [page, setPage] = useState(1)
+  const [dupSearch, setDupSearch] = useState('')
+  const [dupLimit, setDupLimit] = useState(6)
 
   const loadCrawls = useCallback(async () => {
     try {
@@ -299,6 +302,24 @@ export default function IngestionPage() {
       .filter(([, value]) => value)
       .map(([key, value]) => ({ key, value }))
   }, [status])
+
+  const duplicateEntries = useMemo(() => {
+    const duplicates = status?.dedupe?.duplicates || {}
+    const entries = Object.entries(duplicates).map(([canonical, dupes]) => ({
+      canonical,
+      duplicates: dupes,
+    }))
+    const query = dupSearch.trim().toLowerCase()
+    const filtered = query
+      ? entries.filter((entry) =>
+          [entry.canonical, ...(entry.duplicates || [])]
+            .join(' ')
+            .toLowerCase()
+            .includes(query)
+        )
+      : entries
+    return filtered
+  }, [status, dupSearch])
 
   return (
     <div className="space-y-8">
@@ -814,6 +835,77 @@ export default function IngestionPage() {
           </div>
         )}
       </div>
+
+      {status?.dedupe?.duplicates && (
+        <div className="gc-panel p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--gc-ink)] font-display flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[var(--gc-muted)]" />
+                Duplicate Groups
+              </h2>
+              <p className="text-sm text-[var(--gc-muted)]">
+                Canonical URLs with alternate sources detected during ingestion.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[var(--gc-muted)]">
+              <span>Show</span>
+              <select
+                value={dupLimit}
+                onChange={(event) => setDupLimit(Number(event.target.value))}
+                className="rounded-lg border border-[var(--gc-border)] bg-[var(--gc-surface)] px-2 py-1 text-[var(--gc-ink)]"
+              >
+                {[6, 12, 24, 50].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 text-[var(--gc-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={dupSearch}
+              onChange={(event) => setDupSearch(event.target.value)}
+              placeholder="Search duplicates by URL..."
+              className="w-full rounded-lg border border-[var(--gc-border)] bg-[var(--gc-surface)] py-2 pl-9 pr-3 text-sm text-[var(--gc-ink)]"
+            />
+          </div>
+
+          {duplicateEntries.length === 0 ? (
+            <div className="gc-panel-muted p-4 text-sm text-[var(--gc-muted)]">
+              No duplicates detected for this ingestion run.
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {duplicateEntries.slice(0, dupLimit).map((entry) => (
+                <div key={entry.canonical} className="gc-panel-muted p-4 space-y-2 text-sm">
+                  <div className="text-xs uppercase tracking-wider text-[var(--gc-muted)]">
+                    Canonical
+                  </div>
+                  <a
+                    href={entry.canonical}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--gc-accent-strong)] inline-flex items-center gap-1 break-all"
+                  >
+                    {entry.canonical}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <div className="text-xs text-[var(--gc-muted)]">
+                    {entry.duplicates.length} alternate source{entry.duplicates.length !== 1 ? 's' : ''}
+                  </div>
+                  <div className="flex flex-col gap-1 text-xs text-[var(--gc-muted)] break-all">
+                    {entry.duplicates.map((dup) => (
+                      <span key={dup}>↳ {dup}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
