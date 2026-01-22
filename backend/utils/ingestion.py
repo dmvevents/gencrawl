@@ -890,6 +890,8 @@ def ingest_crawl_from_logs(
                 "source_date": source_date,
                 "source_page": source_page,
             }
+            if raw_content:
+                record["content"] = raw_content
             if extraction_meta.get("content_type") and not record.get("content_type"):
                 record["content_type"] = extraction_meta["content_type"]
             if raw_file_path:
@@ -959,8 +961,11 @@ def ingest_crawl_from_logs(
             base_name = url_slug or _slugify(title) or f"document-{ingested + 1}"
             record_path = _ensure_unique_path(structured_dir / f"{base_name}.json")
             outline_path = record_path.with_name(f"{record_path.stem}.outline.json")
+            text_path = record_path.with_name(f"{record_path.stem}.text.txt")
             record["metadata"]["structured_file_path"] = str(record_path.relative_to(output_root))
             record["metadata"]["outline_file_path"] = str(outline_path.relative_to(output_root))
+            if raw_content:
+                record["metadata"]["extracted_text_path"] = str(text_path.relative_to(output_root))
 
             handle.write(json.dumps(record) + "\n")
             ingested += 1
@@ -969,6 +974,9 @@ def ingest_crawl_from_logs(
                 json.dump(record, record_handle, indent=2)
             with open(outline_path, "w") as outline_handle:
                 json.dump(outline, outline_handle, indent=2)
+            if raw_content:
+                with open(text_path, "w") as text_handle:
+                    text_handle.write(raw_content)
 
             if nemo_handle is not None:
                 nemo_record = _build_nemo_record(crawl_id, record, raw_content, extraction_meta)
