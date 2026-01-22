@@ -110,6 +110,55 @@ def _normalize_url(url: Optional[str]) -> Optional[str]:
         return url
 
 
+def _archive_root() -> Path:
+    return get_repo_root() / "data" / "archive"
+
+
+def _archive_index_path() -> Path:
+    return _archive_root() / "index.jsonl"
+
+
+def _load_archive_index() -> Dict[str, Dict[str, Any]]:
+    index_path = _archive_index_path()
+    entries: Dict[str, Dict[str, Any]] = {}
+    if not index_path.exists():
+        return entries
+    with open(index_path, "r") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            entry_hash = entry.get("hash")
+            if entry_hash:
+                entries[entry_hash] = entry
+    return entries
+
+
+def _write_archive_index(entries: Dict[str, Dict[str, Any]]) -> None:
+    root = _archive_root()
+    root.mkdir(parents=True, exist_ok=True)
+    index_path = _archive_index_path()
+    sorted_entries = sorted(
+        entries.values(),
+        key=lambda e: (e.get("last_seen_at") or "", e.get("title") or ""),
+        reverse=True,
+    )
+    with open(index_path, "w") as handle:
+        for entry in sorted_entries:
+            handle.write(json.dumps(entry) + "\n")
+
+
+def _archive_hash_from_record(content_hash: Optional[str], normalized_url: Optional[str]) -> Optional[str]:
+    if content_hash:
+        return content_hash
+    if normalized_url:
+        return hashlib.sha1(normalized_url.encode("utf-8")).hexdigest()
+    return None
+
+
 def _infer_file_type(url: Optional[str], content_type: Optional[str]) -> str:
     if content_type:
         lowered = content_type.lower()
@@ -692,6 +741,8 @@ def ingest_crawl_from_logs(
     seen_urls = set()
     seen_dedupe_keys: Dict[str, str] = {}
     duplicate_map: Dict[str, List[str]] = {}
+    archive_entries = _load_archive_index()
+    archive_updates = 0
     ingested = 0
     duplicates = 0
     extraction_stats = {
@@ -860,6 +911,47 @@ def ingest_crawl_from_logs(
                 else:
                     seen_dedupe_keys[dedupe_key] = url
 
+            archive_hash = _archive_hash_from_record(content_hash, normalized_url)
+            if archive_hash:
+                now = datetime.utcnow().isoformat() + "Z"
+                entry = archive_entries.get(archive_hash)
+                domains = {domain} if domain else set()
+                if entry:
+                    entry["last_seen_at"] = now
+                    if url:
+                        urls = entry.get("urls", [])
+                        if url not in urls:
+                            urls.append(url)
+                            entry["urls"] = urls
+                    if domain:
+                        entry_domains = set(entry.get("source_domains", []))
+                        entry_domains.add(domain)
+                        entry["source_domains"] = sorted(entry_domains)
+                    crawl_ids = set(entry.get("crawl_ids", []))
+                    crawl_ids.add(crawl_id)
+                    entry["crawl_ids"] = sorted(crawl_ids)
+                    entry["url_count"] = len(entry.get("urls", []))
+                else:
+                    archive_entries[archive_hash] = {
+                        "hash": archive_hash,
+                        "hash_basis": "content_hash" if content_hash else "url_normalized",
+                        "canonical_url": url,
+                        "urls": [url] if url else [],
+                        "url_count": 1 if url else 0,
+                        "title": title,
+                        "file_type": file_type,
+                        "file_size": doc.get("file_size", 0),
+                        "source_date": source_date,
+                        "taxonomy": taxonomy,
+                        "structured_path": structured_path,
+                        "source_domains": sorted(domains),
+                        "first_seen_at": now,
+                        "last_seen_at": now,
+                        "crawl_ids": [crawl_id],
+                        "quality_score": doc.get("quality_score", 0.0),
+                    }
+                archive_updates += 1
+
             handle.write(json.dumps(record) + "\n")
             ingested += 1
 
@@ -898,6 +990,10 @@ def ingest_crawl_from_logs(
         "dedupe": {
             "strategy": "content_hash_or_normalized_url",
             "duplicates": duplicate_map,
+        },
+        "archive": {
+            "index_path": str(_archive_index_path()),
+            "updated_entries": archive_updates,
         },
         "taxonomy": config.get("taxonomy", {}),
         "output_structure": output_structure,
@@ -955,6 +1051,9 @@ def ingest_crawl_from_logs(
 
     with open(manifest_path, "w") as handle:
         json.dump(manifest, handle, indent=2)
+
+    if archive_updates:
+        _write_archive_index(archive_entries)
 
     if source_client:
         source_client.close()

@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Moon,
   Sun,
+  Archive,
 } from 'lucide-react'
 import { sessionManager } from '@/lib/session/SessionManager'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -42,6 +43,7 @@ const primaryNav: NavItem[] = [
 const opsNav: NavItem[] = [
   { label: 'Templates', href: '/dashboard/templates', icon: FileText },
   { label: 'Ingestion', href: '/dashboard/ingestion', icon: Database },
+  { label: 'Archive', href: '/dashboard/archive', icon: Archive },
   { label: 'Scheduler', href: '/dashboard/scheduler', icon: Calendar },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]

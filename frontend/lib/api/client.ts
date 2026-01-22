@@ -624,6 +624,46 @@ export interface IngestDocument {
   metadata?: Record<string, any>;
 }
 
+export interface ArchiveEntry {
+  hash: string;
+  hash_basis?: string | null;
+  canonical_url?: string | null;
+  urls: string[];
+  url_count: number;
+  title?: string | null;
+  file_type?: string | null;
+  file_size?: number | null;
+  source_date?: string | null;
+  taxonomy?: Record<string, any>;
+  structured_path?: string | null;
+  source_domains: string[];
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
+  crawl_ids: string[];
+  quality_score?: number | null;
+}
+
+export interface ArchiveResponse {
+  entries: ArchiveEntry[];
+  total: number;
+}
+
+export const archiveApi = {
+  list: (params?: {
+    limit?: number;
+    search?: string;
+    program?: string;
+    subject?: string;
+    doc_type?: string;
+    year?: number;
+    domain?: string;
+  }) => {
+    const query = buildQuery(params || {});
+    return api.get<ArchiveResponse>(`${API_ENDPOINTS.archive}${query}`);
+  },
+  get: (hash: string) => api.get<ArchiveEntry>(API_ENDPOINTS.archiveEntry(hash)),
+};
+
 export interface IngestDocumentsResponse {
   documents: IngestDocument[];
   total: number;
