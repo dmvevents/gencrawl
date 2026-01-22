@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 from utils.paths import get_log_dir, get_repo_root
 from utils.settings_manager import get_settings_manager
@@ -87,6 +87,29 @@ def _stable_id(url: str, title: str) -> str:
     return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
 
+def _normalize_url(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower() or "https"
+        netloc = parsed.netloc.lower()
+        path = parsed.path or "/"
+        # Remove tracking params and sort the rest for stable hashing
+        query_params = [
+            (k, v)
+            for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+            if not k.lower().startswith("utm_")
+            and k.lower() not in {"fbclid", "gclid", "mc_cid", "mc_eid"}
+        ]
+        query_params.sort()
+        query = urlencode(query_params)
+        normalized = urlunparse((scheme, netloc, path, "", query, ""))
+        return normalized
+    except Exception:
+        return url
+
+
 def _infer_file_type(url: Optional[str], content_type: Optional[str]) -> str:
     if content_type:
         lowered = content_type.lower()
@@ -113,6 +136,9 @@ def _download_document(
         head = client.head(url, follow_redirects=True)
         if head.status_code < 400:
             meta["content_type"] = head.headers.get("content-type")
+            meta["etag"] = head.headers.get("etag")
+            meta["last_modified"] = head.headers.get("last-modified")
+            meta["final_url"] = str(head.url)
             meta["content_length"] = int(head.headers.get("content-length") or 0)
             if meta["content_length"] and meta["content_length"] > max_size_bytes:
                 meta["error"] = "content_length_exceeds_limit"
@@ -124,6 +150,9 @@ def _download_document(
         response = client.get(url, follow_redirects=True)
         response.raise_for_status()
         meta["content_type"] = response.headers.get("content-type")
+        meta["etag"] = response.headers.get("etag") or meta.get("etag")
+        meta["last_modified"] = response.headers.get("last-modified") or meta.get("last_modified")
+        meta["final_url"] = str(response.url)
         content_length = int(response.headers.get("content-length") or 0)
         if content_length and content_length > max_size_bytes:
             meta["error"] = "content_length_exceeds_limit"
@@ -661,6 +690,8 @@ def ingest_crawl_from_logs(
     structured_root.mkdir(parents=True, exist_ok=True)
 
     seen_urls = set()
+    seen_dedupe_keys: Dict[str, str] = {}
+    duplicate_map: Dict[str, List[str]] = {}
     ingested = 0
     duplicates = 0
     extraction_stats = {
@@ -744,6 +775,9 @@ def ingest_crawl_from_logs(
             }
             raw_content = ""
             raw_file_path = None
+            content_hash = None
+            normalized_url = _normalize_url(url)
+            download_meta: Dict[str, Any] = {}
 
             if (extract_text or run_nemo_curator) and download_client and url and file_type in supported_text_types:
                 extraction_meta["attempted"] = True
@@ -752,6 +786,7 @@ def ingest_crawl_from_logs(
                 extraction_meta["content_type"] = download_meta.get("content_type") or extraction_meta["content_type"]
                 extraction_meta["content_length"] = download_meta.get("content_length")
                 if content_bytes:
+                    content_hash = hashlib.sha256(content_bytes).hexdigest()
                     raw_content, method, error = _extract_text_from_bytes(file_type, content_bytes, max_text_chars)
                     extraction_meta["method"] = method
                     extraction_meta["error"] = error
@@ -794,6 +829,12 @@ def ingest_crawl_from_logs(
                     "source_page_date": source_meta.get("source_page_date"),
                     "source_page_title": source_meta.get("source_page_title"),
                     "extraction": extraction_meta,
+                    "url_normalized": normalized_url,
+                    "content_hash": content_hash,
+                    "content_length": extraction_meta.get("content_length"),
+                    "etag": download_meta.get("etag"),
+                    "last_modified": download_meta.get("last_modified"),
+                    "final_url": download_meta.get("final_url"),
                 },
                 "source_date": source_date,
                 "source_page": source_page,
@@ -803,6 +844,21 @@ def ingest_crawl_from_logs(
             if raw_file_path:
                 record["metadata"]["raw_file_path"] = raw_file_path
                 raw_files.append(raw_file_path)
+
+            dedupe_key = None
+            if content_hash:
+                dedupe_key = f"hash:{content_hash}"
+            elif normalized_url:
+                dedupe_key = f"url:{normalized_url}"
+            if dedupe_key:
+                canonical = seen_dedupe_keys.get(dedupe_key)
+                if canonical:
+                    duplicates += 1
+                    record["metadata"]["is_duplicate"] = True
+                    record["metadata"]["duplicate_of"] = canonical
+                    duplicate_map.setdefault(canonical, []).append(url)
+                else:
+                    seen_dedupe_keys[dedupe_key] = url
 
             handle.write(json.dumps(record) + "\n")
             ingested += 1
@@ -838,6 +894,10 @@ def ingest_crawl_from_logs(
             "ingested": ingested,
             "duplicates": duplicates,
             "source_documents": len(documents),
+        },
+        "dedupe": {
+            "strategy": "content_hash_or_normalized_url",
+            "duplicates": duplicate_map,
         },
         "taxonomy": config.get("taxonomy", {}),
         "output_structure": output_structure,
