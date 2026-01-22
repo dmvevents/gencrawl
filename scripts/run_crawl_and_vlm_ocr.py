@@ -230,7 +230,11 @@ def normalize_ocr_payload(parsed: object) -> Dict[str, object]:
     text = parsed.get("text") or ""
     markdown = parsed.get("markdown") or ""
     def _clean_b64(value: str) -> str:
-        return re.sub(r"[^A-Za-z0-9+/=]", "", value)
+        cleaned = re.sub(r"[^A-Za-z0-9+/=]", "", value)
+        padding = (-len(cleaned)) % 4
+        if padding:
+            cleaned += "=" * padding
+        return cleaned
     if parsed.get("text_b64"):
         try:
             cleaned = _clean_b64(str(parsed["text_b64"]))
