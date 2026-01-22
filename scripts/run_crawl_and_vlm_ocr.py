@@ -183,7 +183,8 @@ def ocr_gemini(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
         resp.raise_for_status()
         data = resp.json()
         content = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    return {"provider": "gemini", "raw": content}
+    usage = data.get("usageMetadata", {})
+    return {"provider": "gemini", "raw": content, "usage": usage}
 
 
 def parse_json_maybe(raw: str) -> object:
@@ -270,6 +271,7 @@ def run_ocr_on_pdf(
                 "page": page_index + 1,
                 "method": ocr_result.get("provider"),
                 "result": ocr_result.get("parsed") or ocr_result,
+                "usage": ocr_result.get("usage"),
             }
         )
         page_counter[0] += 1
@@ -292,6 +294,8 @@ def main() -> None:
 
     openai_key = os.getenv("OPENAI_API_KEY")
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    gemini_input_price = float(os.getenv("GEMINI_INPUT_PRICE_PER_MILLION", "0.10"))
+    gemini_output_price = float(os.getenv("GEMINI_OUTPUT_PRICE_PER_MILLION", "0.40"))
 
     crawl_id = args.crawl_id
     if crawl_id:
@@ -326,6 +330,7 @@ def main() -> None:
     print(f"[download] saved={len(downloaded)}")
 
     page_counter = [0]
+    gemini_usage_total = {"prompt_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     for url, pdf_path in downloaded:
         if args.max_ocr_pages and page_counter[0] >= args.max_ocr_pages:
             break
@@ -349,7 +354,21 @@ def main() -> None:
         )
         out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
         print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
+        # Aggregate Gemini usage when present
+        for page in result.get("pages", []):
+            if page.get("method") == "gemini":
+                usage = page.get("usage") or {}
+                prompt_tokens = int(usage.get("promptTokenCount", 0) or 0)
+                output_tokens = int(usage.get("candidatesTokenCount", 0) or 0)
+                total_tokens = int(usage.get("totalTokenCount", 0) or 0)
+                gemini_usage_total["prompt_tokens"] += prompt_tokens
+                gemini_usage_total["output_tokens"] += output_tokens
+                gemini_usage_total["total_tokens"] += total_tokens
 
+    gemini_cost = (
+        gemini_usage_total["prompt_tokens"] / 1_000_000 * gemini_input_price
+        + gemini_usage_total["output_tokens"] / 1_000_000 * gemini_output_price
+    )
     summary = {
         "crawl_id": crawl_id,
         "documents_found": len(documents),
@@ -358,6 +377,8 @@ def main() -> None:
         "ocr_provider": args.ocr_provider,
         "openai_model": args.openai_model,
         "gemini_model": args.gemini_model,
+        "gemini_usage": gemini_usage_total,
+        "gemini_cost_usd": round(gemini_cost, 6),
     }
     (ocr_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     print("[done] summary written to", ocr_dir / "summary.json")
