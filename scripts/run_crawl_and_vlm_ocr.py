@@ -132,8 +132,10 @@ def ocr_openai(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
                     {
                         "type": "text",
                         "text": (
-                            "Extract OCR text and structured fields. "
-                            "Return JSON with keys: text, fields (array of {label,value}), headings (array)."
+                            "Extract OCR text and structure. Return JSON with keys: "
+                            "text, markdown, equations (array of {latex,bbox,confidence}), "
+                            "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
+                            "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
                         ),
                     },
                     {
@@ -167,8 +169,10 @@ def ocr_gemini(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
                 "parts": [
                     {
                         "text": (
-                            "Extract OCR text and structured fields. "
-                            "Return JSON with keys: text, fields (array of {label,value}), headings (array)."
+                            "Extract OCR text and structure. Return JSON with keys: "
+                            "text, markdown, equations (array of {latex,bbox,confidence}), "
+                            "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
+                            "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
                         )
                     },
                     {"inline_data": {"mime_type": "image/png", "data": b64}},
@@ -198,6 +202,20 @@ def parse_json_maybe(raw: str) -> object:
         return {"text": raw}
 
 
+def normalize_ocr_payload(parsed: object) -> Dict[str, object]:
+    if not isinstance(parsed, dict):
+        return {"text": str(parsed), "markdown": str(parsed), "equations": [], "tables": []}
+    text = parsed.get("text") or ""
+    markdown = parsed.get("markdown") or text
+    equations = parsed.get("equations") or []
+    tables = parsed.get("tables") or []
+    parsed["text"] = text
+    parsed["markdown"] = markdown
+    parsed["equations"] = equations if isinstance(equations, list) else []
+    parsed["tables"] = tables if isinstance(tables, list) else []
+    return parsed
+
+
 def ocr_page(
     image_path: Path,
     provider: str,
@@ -209,7 +227,7 @@ def ocr_page(
     if provider in ("openai", "hybrid") and openai_key:
         try:
             result = ocr_openai(image_path, openai_model, openai_key)
-            result["parsed"] = parse_json_maybe(result["raw"])
+            result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
             return result
         except Exception as exc:
             if provider != "hybrid":
@@ -217,7 +235,7 @@ def ocr_page(
     if provider in ("gemini", "hybrid") and gemini_key:
         try:
             result = ocr_gemini(image_path, gemini_model, gemini_key)
-            result["parsed"] = parse_json_maybe(result["raw"])
+            result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
             return result
         except Exception as exc:
             return {"provider": "gemini", "error": str(exc)}
@@ -249,7 +267,7 @@ def run_ocr_on_pdf(
                 {
                     "page": page_index + 1,
                     "method": "text-layer",
-                    "text": text_layer,
+                    "result": normalize_ocr_payload({"text": text_layer, "markdown": text_layer}),
                 }
             )
             continue
