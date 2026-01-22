@@ -78,6 +78,7 @@ export const API_ENDPOINTS = {
   ingestDownload: (id: string) => `${API_VERSION}/ingest/${id}/download`,
   ingestCurate: (id: string) => `${API_VERSION}/ingest/${id}/curate`,
   ingestNvIngest: (id: string) => `${API_VERSION}/ingest/${id}/nv-ingest`,
+  ingestStructured: (id: string) => `${API_VERSION}/ingest/${id}/structured`,
 
   // Archive
   archive: `${API_VERSION}/archive`,

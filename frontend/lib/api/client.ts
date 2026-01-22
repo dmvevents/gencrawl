@@ -351,6 +351,10 @@ export const ingestApi = {
     api.post<any>(API_ENDPOINTS.ingestCurate(crawlId)),
   runNvIngest: (crawlId: string, dryRun: boolean = false) =>
     api.post<any>(API_ENDPOINTS.ingestNvIngest(crawlId), { dry_run: dryRun }),
+  getStructured: (crawlId: string, path: string) =>
+    api.get<IngestStructuredResponse>(
+      `${API_ENDPOINTS.ingestStructured(crawlId)}?path=${encodeURIComponent(path)}`
+    ),
 };
 
 // =============================================================================
@@ -667,6 +671,11 @@ export const archiveApi = {
 export interface IngestDocumentsResponse {
   documents: IngestDocument[];
   total: number;
+}
+
+export interface IngestStructuredResponse {
+  path: string;
+  data: any;
 }
 
 export interface DocumentsResponse {

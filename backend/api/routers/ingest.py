@@ -87,6 +87,20 @@ def _load_manifest(crawl_id: str) -> Optional[Dict[str, Any]]:
         return json.load(handle)
 
 
+def _resolve_ingestion_path(crawl_id: str, requested_path: str) -> Path:
+    if not requested_path:
+        raise HTTPException(status_code=400, detail="Missing structured file path")
+    output_root = (get_repo_root() / "data" / "ingestion" / crawl_id).resolve()
+    target = (output_root / requested_path).resolve()
+    if target == output_root or output_root not in target.parents:
+        raise HTTPException(status_code=400, detail="Invalid structured file path")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Structured file not found")
+    if not target.is_file():
+        raise HTTPException(status_code=400, detail="Structured path is not a file")
+    return target
+
+
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_crawl(request: IngestRequest):
     """Normalize crawl results into a structured JSONL output."""
@@ -137,6 +151,21 @@ async def list_ingested_documents(
         documents=[IngestDocument(**doc) for doc in documents],
         total=len(documents),
     )
+
+
+@router.get("/ingest/{crawl_id}/structured")
+async def get_structured_document(
+    crawl_id: str,
+    path: str = Query(..., description="Relative path to structured JSON output"),
+):
+    """Return a structured document JSON blob from ingestion output."""
+    target = _resolve_ingestion_path(crawl_id, path)
+    with open(target, "r") as handle:
+        try:
+            data = json.load(handle)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=500, detail="Structured file contains invalid JSON")
+    return {"path": str(target.relative_to(get_repo_root() / "data" / "ingestion" / crawl_id)), "data": data}
 
 
 @router.get("/ingest/{crawl_id}/download")

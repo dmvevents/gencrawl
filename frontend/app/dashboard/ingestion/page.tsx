@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Search,
   Layers,
+  X,
 } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
 import { crawlsApi, ingestApi, ApiError, CrawlSummary, IngestDocument, IngestStatusResponse } from '@/lib/api/client'
@@ -74,6 +75,12 @@ export default function IngestionPage() {
   const [page, setPage] = useState(1)
   const [dupSearch, setDupSearch] = useState('')
   const [dupLimit, setDupLimit] = useState(6)
+  const [structuredOpen, setStructuredOpen] = useState(false)
+  const [structuredTitle, setStructuredTitle] = useState('')
+  const [structuredPath, setStructuredPath] = useState<string | null>(null)
+  const [structuredPayload, setStructuredPayload] = useState<any>(null)
+  const [structuredError, setStructuredError] = useState<string | null>(null)
+  const [structuredLoading, setStructuredLoading] = useState(false)
 
   const loadCrawls = useCallback(async () => {
     try {
@@ -139,6 +146,31 @@ export default function IngestionPage() {
       loadIngestion(selectedCrawlId)
     }
   }, [crawls, selectedCrawlId, loadIngestion])
+
+  const openStructured = useCallback(async (path: string, label: string, title?: string) => {
+    if (!selectedCrawlId) return
+    setStructuredOpen(true)
+    setStructuredTitle(`${label} output · ${title || 'Untitled document'}`)
+    setStructuredPath(null)
+    setStructuredPayload(null)
+    setStructuredError(null)
+    setStructuredLoading(true)
+    try {
+      const response = await ingestApi.getStructured(selectedCrawlId, path)
+      setStructuredPath(response.path)
+      setStructuredPayload(response.data)
+    } catch (err) {
+      setStructuredError(err instanceof Error ? err.message : 'Failed to load structured output')
+    } finally {
+      setStructuredLoading(false)
+    }
+  }, [selectedCrawlId])
+
+  const closeStructured = useCallback(() => {
+    setStructuredOpen(false)
+    setStructuredError(null)
+    setStructuredLoading(false)
+  }, [])
 
   const fileTypeOptions = useMemo(
     () => ['all', ...new Set(documents.map((doc) => doc.file_type).filter(Boolean))],
@@ -734,6 +766,7 @@ export default function IngestionPage() {
                   <th className="py-2">Source</th>
                   <th className="py-2">Source Date</th>
                   <th className="py-2">Taxonomy</th>
+                  <th className="py-2">Outputs</th>
                   <th className="py-2">Path</th>
                 </tr>
               </thead>
@@ -746,6 +779,8 @@ export default function IngestionPage() {
                     doc.taxonomy?.year,
                     doc.taxonomy?.document_type,
                   ].filter(Boolean)
+                  const structuredFile = doc.metadata?.structured_file_path as string | undefined
+                  const outlineFile = doc.metadata?.outline_file_path as string | undefined
 
                   return (
                     <tr key={`${doc.url}-${index}`} className="align-top">
@@ -799,6 +834,26 @@ export default function IngestionPage() {
                           ) : (
                             <span className="text-xs text-[var(--gc-muted)]">Not tagged</span>
                           )}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() => structuredFile && openStructured(structuredFile, 'Structured', doc.title)}
+                            className="gc-button-secondary text-xs"
+                            disabled={!structuredFile}
+                          >
+                            Structured
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => outlineFile && openStructured(outlineFile, 'Outline', doc.title)}
+                            className="gc-button-secondary text-xs"
+                            disabled={!outlineFile}
+                          >
+                            Outline
+                          </button>
                         </div>
                       </td>
                       <td className="py-3 text-xs text-[var(--gc-muted)] font-mono">
@@ -904,6 +959,42 @@ export default function IngestionPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {structuredOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="gc-panel w-full max-w-5xl p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm uppercase tracking-wider text-[var(--gc-muted)]">Structured Output</div>
+                <h3 className="text-lg font-semibold text-[var(--gc-ink)]">{structuredTitle}</h3>
+                {structuredPath && (
+                  <div className="text-xs text-[var(--gc-muted)] font-mono mt-1">{structuredPath}</div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={closeStructured}
+                className="gc-button-secondary inline-flex items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 max-h-[70vh] overflow-auto rounded-lg border border-[var(--gc-border)] bg-[var(--gc-surface)] p-4 text-xs text-[var(--gc-ink)]">
+              {structuredLoading ? (
+                <div className="text-sm text-[var(--gc-muted)]">Loading structured output…</div>
+              ) : structuredError ? (
+                <div className="text-sm text-rose-700">{structuredError}</div>
+              ) : structuredPayload ? (
+                <pre className="whitespace-pre-wrap">{JSON.stringify(structuredPayload, null, 2)}</pre>
+              ) : (
+                <div className="text-sm text-[var(--gc-muted)]">No structured payload found.</div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

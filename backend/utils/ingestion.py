@@ -952,9 +952,6 @@ def ingest_crawl_from_logs(
                     }
                 archive_updates += 1
 
-            handle.write(json.dumps(record) + "\n")
-            ingested += 1
-
             # Write structured document files
             structured_dir = structured_root / structured_path
             structured_dir.mkdir(parents=True, exist_ok=True)
@@ -962,6 +959,12 @@ def ingest_crawl_from_logs(
             base_name = url_slug or _slugify(title) or f"document-{ingested + 1}"
             record_path = _ensure_unique_path(structured_dir / f"{base_name}.json")
             outline_path = record_path.with_name(f"{record_path.stem}.outline.json")
+            record["metadata"]["structured_file_path"] = str(record_path.relative_to(output_root))
+            record["metadata"]["outline_file_path"] = str(outline_path.relative_to(output_root))
+
+            handle.write(json.dumps(record) + "\n")
+            ingested += 1
+
             with open(record_path, "w") as record_handle:
                 json.dump(record, record_handle, indent=2)
             with open(outline_path, "w") as outline_handle:
