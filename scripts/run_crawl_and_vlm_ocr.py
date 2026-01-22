@@ -279,6 +279,7 @@ def run_ocr_on_pdf(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--query", required=True)
+    parser.add_argument("--crawl-id", default=None)
     parser.add_argument("--targets", nargs="*", default=[])
     parser.add_argument("--file-types", nargs="*", default=["pdf"])
     parser.add_argument("--max-docs", type=int, default=1000)
@@ -292,12 +293,15 @@ def main() -> None:
     openai_key = os.getenv("OPENAI_API_KEY")
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
-    print("[crawl] submitting request...")
-    crawl = submit_crawl(args.query, args.targets, args.file_types, args.max_docs)
-    crawl_id = crawl.get("crawl_id")
-    print(f"[crawl] crawl_id={crawl_id}")
-
-    wait_for_completion(crawl_id)
+    crawl_id = args.crawl_id
+    if crawl_id:
+        print(f"[crawl] using existing crawl_id={crawl_id}")
+    else:
+        print("[crawl] submitting request...")
+        crawl = submit_crawl(args.query, args.targets, args.file_types, args.max_docs)
+        crawl_id = crawl.get("crawl_id")
+        print(f"[crawl] crawl_id={crawl_id}")
+        wait_for_completion(crawl_id)
 
     print("[crawl] fetching discovered documents...")
     documents = fetch_documents(crawl_id, args.max_docs)
@@ -327,6 +331,10 @@ def main() -> None:
             break
         if pdf_path.suffix.lower() != ".pdf":
             continue
+        out_file = ocr_dir / f"{pdf_path.stem}.json"
+        if out_file.exists():
+            print(f"[ocr] skip {pdf_path.name} (already processed)")
+            continue
         result = run_ocr_on_pdf(
             pdf_path=pdf_path,
             out_dir=ocr_dir,
@@ -339,7 +347,6 @@ def main() -> None:
             max_pages_total=args.max_ocr_pages,
             page_counter=page_counter,
         )
-        out_file = ocr_dir / f"{pdf_path.stem}.json"
         out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
         print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
 
