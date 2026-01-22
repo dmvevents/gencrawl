@@ -132,8 +132,8 @@ def ocr_openai(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
                     {
                         "type": "text",
                         "text": (
-                            "Extract OCR text and structure. Return JSON with keys: "
-                            "text, markdown, equations (array of {latex,bbox,confidence}), "
+                            "Extract OCR text and structure. Return JSON only. Use base64 for long fields. "
+                            "Return keys: text_b64, markdown_b64, equations (array of {latex,bbox,confidence}), "
                             "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
                             "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
                         ),
@@ -169,8 +169,8 @@ def ocr_gemini(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
                 "parts": [
                     {
                         "text": (
-                            "Extract OCR text and structure. Return JSON with keys: "
-                            "text, markdown, equations (array of {latex,bbox,confidence}), "
+                            "Extract OCR text and structure. Return JSON only. Use base64 for long fields. "
+                            "Return keys: text_b64, markdown_b64, equations (array of {latex,bbox,confidence}), "
                             "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
                             "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
                         )
@@ -215,7 +215,19 @@ def normalize_ocr_payload(parsed: object) -> Dict[str, object]:
     if not isinstance(parsed, dict):
         return {"text": str(parsed), "markdown": str(parsed), "equations": [], "tables": []}
     text = parsed.get("text") or ""
-    markdown = parsed.get("markdown") or text
+    markdown = parsed.get("markdown") or ""
+    if parsed.get("text_b64"):
+        try:
+            text = base64.b64decode(parsed["text_b64"]).decode("utf-8", errors="ignore")
+        except Exception:
+            text = parsed.get("text_b64") or text
+    if parsed.get("markdown_b64"):
+        try:
+            markdown = base64.b64decode(parsed["markdown_b64"]).decode("utf-8", errors="ignore")
+        except Exception:
+            markdown = parsed.get("markdown_b64") or markdown
+    if not markdown:
+        markdown = parsed.get("markdown") or text
     equations = parsed.get("equations") or []
     tables = parsed.get("tables") or []
     parsed["text"] = text
