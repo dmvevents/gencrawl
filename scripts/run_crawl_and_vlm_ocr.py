@@ -119,7 +119,7 @@ def extract_text_layer(page: fitz.Page, min_chars: int) -> Optional[str]:
     return None
 
 
-def ocr_openai(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
+def ocr_openai(image_path: Path, model: str, api_key: str, max_output_tokens: int) -> Dict[str, object]:
     with image_path.open("rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     payload = {
@@ -146,7 +146,7 @@ def ocr_openai(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
             },
         ],
         "temperature": 0,
-        "max_tokens": 800,
+        "max_tokens": max_output_tokens,
     }
     with httpx.Client(timeout=60) as client:
         resp = client.post(
@@ -159,7 +159,7 @@ def ocr_openai(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
     return {"provider": "openai", "raw": content}
 
 
-def ocr_gemini(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
+def ocr_gemini(image_path: Path, model: str, api_key: str, max_output_tokens: int) -> Dict[str, object]:
     with image_path.open("rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     payload = {
@@ -179,7 +179,7 @@ def ocr_gemini(image_path: Path, model: str, api_key: str) -> Dict[str, object]:
                 ],
             }
         ],
-        "generationConfig": {"temperature": 0, "maxOutputTokens": 800},
+        "generationConfig": {"temperature": 0, "maxOutputTokens": max_output_tokens},
     }
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     with httpx.Client(timeout=60) as client:
@@ -257,10 +257,11 @@ def ocr_page(
     gemini_key: Optional[str],
     openai_model: str,
     gemini_model: str,
+    max_output_tokens: int,
 ) -> Dict[str, object]:
     if provider in ("openai", "hybrid") and openai_key:
         try:
-            result = ocr_openai(image_path, openai_model, openai_key)
+            result = ocr_openai(image_path, openai_model, openai_key, max_output_tokens)
             result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
             return result
         except Exception as exc:
@@ -268,7 +269,7 @@ def ocr_page(
                 return {"provider": "openai", "error": str(exc)}
     if provider in ("gemini", "hybrid") and gemini_key:
         try:
-            result = ocr_gemini(image_path, gemini_model, gemini_key)
+            result = ocr_gemini(image_path, gemini_model, gemini_key, max_output_tokens)
             result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
             return result
         except Exception as exc:
@@ -289,6 +290,7 @@ def run_ocr_on_pdf(
     page_counter: List[int],
     image_scale: float,
     force_ocr: bool,
+    max_output_tokens: int,
 ) -> Dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
@@ -319,6 +321,7 @@ def run_ocr_on_pdf(
             gemini_key=gemini_key,
             openai_model=openai_model,
             gemini_model=gemini_model,
+            max_output_tokens=max_output_tokens,
         )
         pages_out.append(
             {
@@ -350,6 +353,7 @@ def main() -> None:
     parser.add_argument("--ocr-dir", default=None, help="Override OCR output directory")
     parser.add_argument("--image-scale", type=float, default=2.5, help="Render scale for OCR (higher = clearer)")
     parser.add_argument("--force-ocr", action="store_true", help="Force OCR even if text layer is present")
+    parser.add_argument("--max-output-tokens", type=int, default=2000, help="Max output tokens per OCR call")
     args = parser.parse_args()
 
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -476,6 +480,7 @@ def main() -> None:
             page_counter=page_counter,
             image_scale=args.image_scale,
             force_ocr=args.force_ocr,
+            max_output_tokens=args.max_output_tokens,
         )
         out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
         print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
