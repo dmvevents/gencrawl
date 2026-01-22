@@ -332,8 +332,19 @@ def main() -> None:
 
     print(f"[download] saved={len(downloaded)}")
 
+    summary_path = ocr_dir / "summary.json"
     page_counter = [0]
     gemini_usage_total = {"prompt_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    if summary_path.exists():
+        try:
+            existing = json.loads(summary_path.read_text())
+            page_counter[0] = int(existing.get("ocr_pages_processed", 0) or 0)
+            usage = existing.get("gemini_usage", {}) or {}
+            gemini_usage_total["prompt_tokens"] = int(usage.get("prompt_tokens", 0) or 0)
+            gemini_usage_total["output_tokens"] = int(usage.get("output_tokens", 0) or 0)
+            gemini_usage_total["total_tokens"] = int(usage.get("total_tokens", 0) or 0)
+        except Exception:
+            pass
     start_time = time.time()
 
     def write_summary():
@@ -354,7 +365,7 @@ def main() -> None:
             "batch_limit_pages": args.batch_pages,
             "max_runtime_seconds": args.max_runtime_seconds,
         }
-        (ocr_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+        summary_path.write_text(json.dumps(summary, indent=2))
     for url, pdf_path in downloaded:
         if args.max_ocr_pages and page_counter[0] >= args.max_ocr_pages:
             break
