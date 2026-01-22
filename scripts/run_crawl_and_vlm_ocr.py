@@ -253,6 +253,8 @@ def run_ocr_on_pdf(
     min_text_chars: int,
     max_pages_total: Optional[int],
     page_counter: List[int],
+    image_scale: float,
+    force_ocr: bool,
 ) -> Dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
@@ -261,7 +263,7 @@ def run_ocr_on_pdf(
         if max_pages_total and page_counter[0] >= max_pages_total:
             break
         page = doc.load_page(page_index)
-        text_layer = extract_text_layer(page, min_text_chars)
+        text_layer = None if force_ocr else extract_text_layer(page, min_text_chars)
         if text_layer:
             pages_out.append(
                 {
@@ -272,7 +274,7 @@ def run_ocr_on_pdf(
             )
             continue
 
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        pix = page.get_pixmap(matrix=fitz.Matrix(image_scale, image_scale))
         image_path = out_dir / f"{pdf_path.stem}_page{page_index + 1}.png"
         pix.save(image_path)
 
@@ -300,6 +302,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--query", required=True)
     parser.add_argument("--crawl-id", default=None)
+    parser.add_argument("--url", default=None, help="Process a single PDF URL without running a crawl")
     parser.add_argument("--targets", nargs="*", default=[])
     parser.add_argument("--file-types", nargs="*", default=["pdf"])
     parser.add_argument("--max-docs", type=int, default=1000)
@@ -311,6 +314,8 @@ def main() -> None:
     parser.add_argument("--openai-model", default=os.getenv("OPENAI_OCR_MODEL", "gpt-4o-mini"))
     parser.add_argument("--gemini-model", default=os.getenv("GEMINI_OCR_MODEL", "gemini-2.0-flash"))
     parser.add_argument("--ocr-dir", default=None, help="Override OCR output directory")
+    parser.add_argument("--image-scale", type=float, default=2.5, help="Render scale for OCR (higher = clearer)")
+    parser.add_argument("--force-ocr", action="store_true", help="Force OCR even if text layer is present")
     args = parser.parse_args()
 
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -321,6 +326,9 @@ def main() -> None:
     crawl_id = args.crawl_id
     if crawl_id:
         print(f"[crawl] using existing crawl_id={crawl_id}")
+    elif args.url:
+        crawl_id = "manual"
+        print(f"[crawl] skipping crawl (single URL mode) crawl_id={crawl_id}")
     else:
         print("[crawl] submitting request...")
         crawl = submit_crawl(args.query, args.targets, args.file_types, args.max_docs)
@@ -328,9 +336,13 @@ def main() -> None:
         print(f"[crawl] crawl_id={crawl_id}")
         wait_for_completion(crawl_id)
 
-    print("[crawl] fetching discovered documents...")
-    documents = fetch_documents(crawl_id, args.max_docs)
-    print(f"[crawl] discovered={len(documents)}")
+    if args.url:
+        documents = [{"url": args.url}]
+        print("[crawl] single URL provided, skipping document fetch")
+    else:
+        print("[crawl] fetching discovered documents...")
+        documents = fetch_documents(crawl_id, args.max_docs)
+        print(f"[crawl] discovered={len(documents)}")
 
     raw_dir = Path("data") / "ingestion" / crawl_id / "raw"
     ocr_dir = Path(args.ocr_dir) if args.ocr_dir else (Path("data") / "ingestion" / crawl_id / "ocr")
@@ -428,6 +440,8 @@ def main() -> None:
             min_text_chars=args.min_text_chars,
             max_pages_total=args.max_ocr_pages,
             page_counter=page_counter,
+            image_scale=args.image_scale,
+            force_ocr=args.force_ocr,
         )
         out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
         print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
