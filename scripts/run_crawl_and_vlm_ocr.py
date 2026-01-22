@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 
 import fitz
 import httpx
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
 
 API_BASE = os.getenv("GENCRAWL_API", "http://localhost:8000/api/v1")
 
@@ -281,6 +281,19 @@ def ocr_page(
     return {"provider": provider, "error": "No provider key available"}
 
 
+def preprocess_image(path: Path, grayscale: bool, autocontrast: bool, sharpen: bool) -> None:
+    if not (grayscale or autocontrast or sharpen):
+        return
+    img = Image.open(path)
+    if grayscale:
+        img = img.convert("L")
+    if autocontrast:
+        img = ImageOps.autocontrast(img)
+    if sharpen:
+        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+    img.save(path)
+
+
 def run_ocr_on_pdf(
     pdf_path: Path,
     out_dir: Path,
@@ -295,6 +308,7 @@ def run_ocr_on_pdf(
     image_scale: float,
     force_ocr: bool,
     max_output_tokens: int,
+    preprocess_opts: Dict[str, bool],
 ) -> Dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
@@ -317,6 +331,12 @@ def run_ocr_on_pdf(
         pix = page.get_pixmap(matrix=fitz.Matrix(image_scale, image_scale))
         image_path = out_dir / f"{pdf_path.stem}_page{page_index + 1}.png"
         pix.save(image_path)
+        preprocess_image(
+            image_path,
+            grayscale=preprocess_opts.get("grayscale", False),
+            autocontrast=preprocess_opts.get("autocontrast", False),
+            sharpen=preprocess_opts.get("sharpen", False),
+        )
 
         ocr_result = ocr_page(
             image_path=image_path,
@@ -358,6 +378,9 @@ def main() -> None:
     parser.add_argument("--image-scale", type=float, default=2.5, help="Render scale for OCR (higher = clearer)")
     parser.add_argument("--force-ocr", action="store_true", help="Force OCR even if text layer is present")
     parser.add_argument("--max-output-tokens", type=int, default=2000, help="Max output tokens per OCR call")
+    parser.add_argument("--grayscale", action="store_true", help="Convert pages to grayscale before OCR")
+    parser.add_argument("--autocontrast", action="store_true", help="Autocontrast pages before OCR")
+    parser.add_argument("--sharpen", action="store_true", help="Sharpen pages before OCR")
     args = parser.parse_args()
 
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -485,6 +508,11 @@ def main() -> None:
             image_scale=args.image_scale,
             force_ocr=args.force_ocr,
             max_output_tokens=args.max_output_tokens,
+            preprocess_opts={
+                "grayscale": args.grayscale,
+                "autocontrast": args.autocontrast,
+                "sharpen": args.sharpen,
+            },
         )
         out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
         print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
