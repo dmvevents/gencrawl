@@ -335,16 +335,36 @@ def main() -> None:
     summary_path = ocr_dir / "summary.json"
     page_counter = [0]
     gemini_usage_total = {"prompt_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-    if summary_path.exists():
-        try:
-            existing = json.loads(summary_path.read_text())
-            page_counter[0] = int(existing.get("ocr_pages_processed", 0) or 0)
-            usage = existing.get("gemini_usage", {}) or {}
-            gemini_usage_total["prompt_tokens"] = int(usage.get("prompt_tokens", 0) or 0)
-            gemini_usage_total["output_tokens"] = int(usage.get("output_tokens", 0) or 0)
-            gemini_usage_total["total_tokens"] = int(usage.get("total_tokens", 0) or 0)
-        except Exception:
-            pass
+    def hydrate_from_existing_outputs() -> None:
+        nonlocal gemini_usage_total
+        total_pages = 0
+        prompt_total = 0
+        output_total = 0
+        total_total = 0
+        for path in ocr_dir.glob("*.json"):
+            if path.name == "summary.json":
+                continue
+            try:
+                data = json.loads(path.read_text())
+            except Exception:
+                continue
+            for page in data.get("pages", []):
+                if page.get("method") != "gemini":
+                    continue
+                total_pages += 1
+                usage = page.get("usage") or {}
+                prompt_total += int(usage.get("promptTokenCount", 0) or 0)
+                output_total += int(usage.get("candidatesTokenCount", 0) or 0)
+                total_total += int(usage.get("totalTokenCount", 0) or 0)
+        if total_pages > 0:
+            page_counter[0] = total_pages
+            gemini_usage_total = {
+                "prompt_tokens": prompt_total,
+                "output_tokens": output_total,
+                "total_tokens": total_total,
+            }
+
+    hydrate_from_existing_outputs()
     start_time = time.time()
 
     def write_summary():
