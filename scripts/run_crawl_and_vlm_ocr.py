@@ -119,7 +119,13 @@ def extract_text_layer(page: fitz.Page, min_chars: int) -> Optional[str]:
     return None
 
 
-def ocr_openai(image_path: Path, model: str, api_key: str, max_output_tokens: int) -> Dict[str, object]:
+def ocr_openai(
+    image_path: Path,
+    model: str,
+    api_key: str,
+    max_output_tokens: int,
+    use_base64: bool,
+) -> Dict[str, object]:
     with image_path.open("rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     payload = {
@@ -132,10 +138,15 @@ def ocr_openai(image_path: Path, model: str, api_key: str, max_output_tokens: in
                     {
                         "type": "text",
                         "text": (
-                            "Extract OCR text and structure. Return JSON only. Use base64 for long fields. "
-                            "Return keys: text_b64, markdown_b64, equations (array of {latex,bbox,confidence}), "
-                            "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
-                            "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
+                            "Extract OCR text and structure. Return JSON only. "
+                            + (
+                                "Use base64 for long fields. Return keys: text_b64, markdown_b64, "
+                                if use_base64
+                                else "Return keys: text, markdown, "
+                            )
+                            + "equations (array of {latex,bbox,confidence}), "
+                            + "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
+                            + "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
                         ),
                     },
                     {
@@ -159,7 +170,13 @@ def ocr_openai(image_path: Path, model: str, api_key: str, max_output_tokens: in
     return {"provider": "openai", "raw": content}
 
 
-def ocr_gemini(image_path: Path, model: str, api_key: str, max_output_tokens: int) -> Dict[str, object]:
+def ocr_gemini(
+    image_path: Path,
+    model: str,
+    api_key: str,
+    max_output_tokens: int,
+    use_base64: bool,
+) -> Dict[str, object]:
     with image_path.open("rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     payload = {
@@ -169,10 +186,15 @@ def ocr_gemini(image_path: Path, model: str, api_key: str, max_output_tokens: in
                 "parts": [
                     {
                         "text": (
-                            "Extract OCR text and structure. Return JSON only. Use base64 for long fields. "
-                            "Return keys: text_b64, markdown_b64, equations (array of {latex,bbox,confidence}), "
-                            "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
-                            "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
+                            "Extract OCR text and structure. Return JSON only. "
+                            + (
+                                "Use base64 for long fields. Return keys: text_b64, markdown_b64, "
+                                if use_base64
+                                else "Return keys: text, markdown, "
+                            )
+                            + "equations (array of {latex,bbox,confidence}), "
+                            + "tables (array of {markdown,bbox,confidence}), fields (array of {label,value}), "
+                            + "headings (array). Use bbox as normalized [x1,y1,x2,y2] values from 0-1."
                         )
                     },
                     {"inline_data": {"mime_type": "image/png", "data": b64}},
@@ -266,10 +288,11 @@ def ocr_page(
     openai_model: str,
     gemini_model: str,
     max_output_tokens: int,
+    use_base64: bool,
 ) -> Dict[str, object]:
     if provider in ("openai", "hybrid") and openai_key:
         try:
-            result = ocr_openai(image_path, openai_model, openai_key, max_output_tokens)
+            result = ocr_openai(image_path, openai_model, openai_key, max_output_tokens, use_base64)
             result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
             return result
         except Exception as exc:
@@ -277,7 +300,7 @@ def ocr_page(
                 return {"provider": "openai", "error": str(exc)}
     if provider in ("gemini", "hybrid") and gemini_key:
         try:
-            result = ocr_gemini(image_path, gemini_model, gemini_key, max_output_tokens)
+            result = ocr_gemini(image_path, gemini_model, gemini_key, max_output_tokens, use_base64)
             result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
             return result
         except Exception as exc:
@@ -313,6 +336,7 @@ def run_ocr_on_pdf(
     force_ocr: bool,
     max_output_tokens: int,
     preprocess_opts: Dict[str, bool],
+    use_base64: bool,
 ) -> Dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
@@ -350,6 +374,7 @@ def run_ocr_on_pdf(
             openai_model=openai_model,
             gemini_model=gemini_model,
             max_output_tokens=max_output_tokens,
+            use_base64=use_base64,
         )
         pages_out.append(
             {
@@ -385,6 +410,7 @@ def main() -> None:
     parser.add_argument("--grayscale", action="store_true", help="Convert pages to grayscale before OCR")
     parser.add_argument("--autocontrast", action="store_true", help="Autocontrast pages before OCR")
     parser.add_argument("--sharpen", action="store_true", help="Sharpen pages before OCR")
+    parser.add_argument("--use-base64", action="store_true", help="Request base64 text fields in OCR output")
     args = parser.parse_args()
 
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -517,6 +543,7 @@ def main() -> None:
                 "autocontrast": args.autocontrast,
                 "sharpen": args.sharpen,
             },
+            use_base64=args.use_base64,
         )
         out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
         print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
