@@ -81,6 +81,7 @@ export default function IngestionPage() {
   const [structuredPayload, setStructuredPayload] = useState<any>(null)
   const [structuredError, setStructuredError] = useState<string | null>(null)
   const [structuredLoading, setStructuredLoading] = useState(false)
+  const [structuredMode, setStructuredMode] = useState<'json' | 'markdown'>('json')
 
   const loadCrawls = useCallback(async () => {
     try {
@@ -147,7 +148,12 @@ export default function IngestionPage() {
     }
   }, [crawls, selectedCrawlId, loadIngestion])
 
-  const openStructured = useCallback(async (path: string, label: string, title?: string) => {
+  const openStructured = useCallback(async (
+    path: string,
+    label: string,
+    title?: string,
+    mode: 'json' | 'markdown' = 'json'
+  ) => {
     if (!selectedCrawlId) return
     setStructuredOpen(true)
     setStructuredTitle(`${label} output · ${title || 'Untitled document'}`)
@@ -155,6 +161,7 @@ export default function IngestionPage() {
     setStructuredPayload(null)
     setStructuredError(null)
     setStructuredLoading(true)
+    setStructuredMode(mode)
     try {
       const response = await ingestApi.getStructured(selectedCrawlId, path)
       setStructuredPath(response.path)
@@ -840,7 +847,7 @@ export default function IngestionPage() {
                         <div className="flex flex-col gap-2">
                           <button
                             type="button"
-                            onClick={() => structuredFile && openStructured(structuredFile, 'Structured', doc.title)}
+                            onClick={() => structuredFile && openStructured(structuredFile, 'Structured', doc.title, 'json')}
                             className="gc-button-secondary text-xs"
                             disabled={!structuredFile}
                           >
@@ -848,11 +855,19 @@ export default function IngestionPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => outlineFile && openStructured(outlineFile, 'Outline', doc.title)}
+                            onClick={() => outlineFile && openStructured(outlineFile, 'Outline', doc.title, 'json')}
                             className="gc-button-secondary text-xs"
                             disabled={!outlineFile}
                           >
                             Outline
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => structuredFile && openStructured(structuredFile, 'Markdown', doc.title, 'markdown')}
+                            className="gc-button-secondary text-xs"
+                            disabled={!structuredFile}
+                          >
+                            Markdown
                           </button>
                         </div>
                       </td>
@@ -989,7 +1004,13 @@ export default function IngestionPage() {
               ) : structuredError ? (
                 <div className="text-sm text-rose-700">{structuredError}</div>
               ) : structuredPayload ? (
-                <pre className="whitespace-pre-wrap">{JSON.stringify(structuredPayload, null, 2)}</pre>
+                structuredMode === 'markdown' ? (
+                  <pre className="whitespace-pre-wrap">
+                    {structuredPayload.content_markdown || structuredPayload.content || 'No markdown content found.'}
+                  </pre>
+                ) : (
+                  <pre className="whitespace-pre-wrap">{JSON.stringify(structuredPayload, null, 2)}</pre>
+                )
               ) : (
                 <div className="text-sm text-[var(--gc-muted)]">No structured payload found.</div>
               )}
