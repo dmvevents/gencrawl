@@ -229,14 +229,18 @@ def normalize_ocr_payload(parsed: object) -> Dict[str, object]:
         return {"text": str(parsed), "markdown": str(parsed), "equations": [], "tables": []}
     text = parsed.get("text") or ""
     markdown = parsed.get("markdown") or ""
+    def _clean_b64(value: str) -> str:
+        return re.sub(r"[^A-Za-z0-9+/=]", "", value)
     if parsed.get("text_b64"):
         try:
-            text = base64.b64decode(parsed["text_b64"]).decode("utf-8", errors="ignore")
+            cleaned = _clean_b64(str(parsed["text_b64"]))
+            text = base64.b64decode(cleaned).decode("utf-8", errors="ignore")
         except Exception:
             text = parsed.get("text_b64") or text
     if parsed.get("markdown_b64"):
         try:
-            markdown = base64.b64decode(parsed["markdown_b64"]).decode("utf-8", errors="ignore")
+            cleaned = _clean_b64(str(parsed["markdown_b64"]))
+            markdown = base64.b64decode(cleaned).decode("utf-8", errors="ignore")
         except Exception:
             markdown = parsed.get("markdown_b64") or markdown
     if not markdown:
