@@ -286,6 +286,8 @@ def main() -> None:
     parser.add_argument("--file-types", nargs="*", default=["pdf"])
     parser.add_argument("--max-docs", type=int, default=1000)
     parser.add_argument("--max-ocr-pages", type=int, default=150)
+    parser.add_argument("--batch-pages", type=int, default=25, help="Max OCR pages per run to avoid timeouts")
+    parser.add_argument("--max-runtime-seconds", type=int, default=0, help="Stop after this many seconds (0 = no limit)")
     parser.add_argument("--min-text-chars", type=int, default=120)
     parser.add_argument("--ocr-provider", choices=["openai", "gemini", "hybrid"], default="hybrid")
     parser.add_argument("--openai-model", default=os.getenv("OPENAI_OCR_MODEL", "gpt-4o-mini"))
@@ -332,8 +334,33 @@ def main() -> None:
 
     page_counter = [0]
     gemini_usage_total = {"prompt_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    start_time = time.time()
+
+    def write_summary():
+        gemini_cost = (
+            gemini_usage_total["prompt_tokens"] / 1_000_000 * gemini_input_price
+            + gemini_usage_total["output_tokens"] / 1_000_000 * gemini_output_price
+        )
+        summary = {
+            "crawl_id": crawl_id,
+            "documents_found": len(documents),
+            "documents_downloaded": len(downloaded),
+            "ocr_pages_processed": page_counter[0],
+            "ocr_provider": args.ocr_provider,
+            "openai_model": args.openai_model,
+            "gemini_model": args.gemini_model,
+            "gemini_usage": gemini_usage_total,
+            "gemini_cost_usd": round(gemini_cost, 6),
+            "batch_limit_pages": args.batch_pages,
+            "max_runtime_seconds": args.max_runtime_seconds,
+        }
+        (ocr_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     for url, pdf_path in downloaded:
         if args.max_ocr_pages and page_counter[0] >= args.max_ocr_pages:
+            break
+        if args.batch_pages and page_counter[0] >= args.batch_pages:
+            break
+        if args.max_runtime_seconds and (time.time() - start_time) > args.max_runtime_seconds:
             break
         if pdf_path.suffix.lower() != ".pdf":
             continue
@@ -365,23 +392,8 @@ def main() -> None:
                 gemini_usage_total["prompt_tokens"] += prompt_tokens
                 gemini_usage_total["output_tokens"] += output_tokens
                 gemini_usage_total["total_tokens"] += total_tokens
-
-    gemini_cost = (
-        gemini_usage_total["prompt_tokens"] / 1_000_000 * gemini_input_price
-        + gemini_usage_total["output_tokens"] / 1_000_000 * gemini_output_price
-    )
-    summary = {
-        "crawl_id": crawl_id,
-        "documents_found": len(documents),
-        "documents_downloaded": len(downloaded),
-        "ocr_pages_processed": page_counter[0],
-        "ocr_provider": args.ocr_provider,
-        "openai_model": args.openai_model,
-        "gemini_model": args.gemini_model,
-        "gemini_usage": gemini_usage_total,
-        "gemini_cost_usd": round(gemini_cost, 6),
-    }
-    (ocr_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+        write_summary()
+    write_summary()
     print("[done] summary written to", ocr_dir / "summary.json")
 
 
