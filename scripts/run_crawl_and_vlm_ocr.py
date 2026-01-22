@@ -208,6 +208,19 @@ def parse_json_maybe(raw: str) -> object:
                 return json.loads(candidate)
             except json.JSONDecodeError:
                 pass
+        # Fallback: regex extract key fields from malformed JSON
+        extracted: Dict[str, str] = {}
+        text_b64 = re.search(r'"text_b64"\s*:\s*"([^"]+)"', raw, re.DOTALL)
+        if text_b64:
+            extracted["text_b64"] = text_b64.group(1).replace("\n", "").replace("\r", "")
+        markdown_b64 = re.search(r'"markdown_b64"\s*:\s*"([^"]+)"', raw, re.DOTALL)
+        if markdown_b64:
+            extracted["markdown_b64"] = markdown_b64.group(1).replace("\n", "").replace("\r", "")
+        text_plain = re.search(r'"text"\s*:\s*"([^"]+)"', raw, re.DOTALL)
+        if text_plain and "text_b64" not in extracted:
+            extracted["text"] = text_plain.group(1)
+        if extracted:
+            return extracted
         return {"text": raw}
 
 
