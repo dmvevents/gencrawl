@@ -290,6 +290,7 @@ def main() -> None:
     parser.add_argument("--ocr-provider", choices=["openai", "gemini", "hybrid"], default="hybrid")
     parser.add_argument("--openai-model", default=os.getenv("OPENAI_OCR_MODEL", "gpt-4o-mini"))
     parser.add_argument("--gemini-model", default=os.getenv("GEMINI_OCR_MODEL", "gemini-2.0-flash"))
+    parser.add_argument("--ocr-dir", default=None, help="Override OCR output directory")
     args = parser.parse_args()
 
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -312,7 +313,7 @@ def main() -> None:
     print(f"[crawl] discovered={len(documents)}")
 
     raw_dir = Path("data") / "ingestion" / crawl_id / "raw"
-    ocr_dir = Path("data") / "ingestion" / crawl_id / "ocr"
+    ocr_dir = Path(args.ocr_dir) if args.ocr_dir else (Path("data") / "ingestion" / crawl_id / "ocr")
     raw_dir.mkdir(parents=True, exist_ok=True)
     ocr_dir.mkdir(parents=True, exist_ok=True)
 
