@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Search,
   ChevronLeft,
@@ -23,7 +23,9 @@ import { crawlsApi, CrawlSummary, CrawlsListResponse, ApiError } from '@/lib/api
 
 interface CrawlHistoryTableProps {
   onSelectCrawl: (crawlId: string) => void
+  onViewDetails?: (crawlId: string) => void
   selectedCrawlId?: string
+  autoSelectFirst?: boolean
 }
 
 const STATUS_CONFIG: Record<string, { className: string; icon: typeof CheckCircle }> = {
@@ -80,10 +82,16 @@ function truncateText(text: string | null, maxLength: number): string {
   return text.substring(0, maxLength) + '...'
 }
 
-export function CrawlHistoryTable({ onSelectCrawl, selectedCrawlId }: CrawlHistoryTableProps) {
+export function CrawlHistoryTable({
+  onSelectCrawl,
+  onViewDetails,
+  selectedCrawlId,
+  autoSelectFirst = true,
+}: CrawlHistoryTableProps) {
   const [crawls, setCrawls] = useState<CrawlSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const autoSelectRef = useRef(false)
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -141,6 +149,23 @@ export function CrawlHistoryTable({ onSelectCrawl, selectedCrawlId }: CrawlHisto
   useEffect(() => {
     fetchCrawls()
   }, [fetchCrawls])
+
+  useEffect(() => {
+    if (!selectedCrawlId) {
+      autoSelectRef.current = false
+    }
+  }, [selectedCrawlId])
+
+  useEffect(() => {
+    if (!autoSelectFirst || selectedCrawlId || loading || crawls.length === 0) {
+      return
+    }
+    if (autoSelectRef.current) {
+      return
+    }
+    onSelectCrawl(crawls[0].crawl_id)
+    autoSelectRef.current = true
+  }, [autoSelectFirst, selectedCrawlId, loading, crawls, onSelectCrawl])
 
   // Auto-refresh for active crawls
   useEffect(() => {
@@ -421,7 +446,11 @@ export function CrawlHistoryTable({ onSelectCrawl, selectedCrawlId }: CrawlHisto
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        onSelectCrawl(crawl.crawl_id)
+                        if (onViewDetails) {
+                          onViewDetails(crawl.crawl_id)
+                        } else {
+                          onSelectCrawl(crawl.crawl_id)
+                        }
                       }}
                       className="p-1.5 rounded-lg text-[var(--gc-muted)] hover:text-[var(--gc-accent-strong)] hover:bg-[var(--gc-surface-muted)] transition-colors"
                       title="View details"

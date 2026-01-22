@@ -59,6 +59,7 @@ function DashboardContent({ initialTab }: { initialTab: TabType }) {
       : (sessionManager.getState('activeTab', 'overview') as TabType)
   )
   const [selectedCrawl, setSelectedCrawl] = useState<string | undefined>()
+  const [historyCrawlId, setHistoryCrawlId] = useState<string | null>(null)
   const [detailModalCrawlId, setDetailModalCrawlId] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -78,7 +79,7 @@ function DashboardContent({ initialTab }: { initialTab: TabType }) {
   }
 
   const handleHistoryCrawlSelect = useCallback((crawlId: string) => {
-    setDetailModalCrawlId(crawlId)
+    setHistoryCrawlId(crawlId)
   }, [])
 
   const handleRerun = useCallback((newCrawlId: string) => {
@@ -426,8 +427,25 @@ function DashboardContent({ initialTab }: { initialTab: TabType }) {
                 <CrawlHistoryTable
                   key={refreshKey}
                   onSelectCrawl={handleHistoryCrawlSelect}
-                  selectedCrawlId={detailModalCrawlId || undefined}
+                  onViewDetails={setDetailModalCrawlId}
+                  selectedCrawlId={historyCrawlId || undefined}
                 />
+              </section>
+
+              {/* Documents for selected crawl */}
+              <section>
+                <h2 className="text-xl font-semibold mb-4 text-[var(--gc-ink)] font-display">
+                  Documents Found
+                </h2>
+                {historyCrawlId ? (
+                  <DocumentFeed crawlId={historyCrawlId} />
+                ) : (
+                  <EmptyState
+                    icon={History}
+                    title="Select a crawl to view documents"
+                    description="Click a crawl in the history table to load its discovered documents."
+                  />
+                )}
               </section>
             </div>
           )}
