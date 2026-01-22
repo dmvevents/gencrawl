@@ -199,6 +199,15 @@ def parse_json_maybe(raw: str) -> object:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
+        # Best-effort: try extracting the largest JSON-like blob
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = raw[start : end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
         return {"text": raw}
 
 
