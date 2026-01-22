@@ -1,0 +1,299 @@
+'use client';
+
+/**
+ * Job Detail Page
+ *
+ * Comprehensive view of a single crawl job with:
+ * - 6-tab interface (Overview, Progress, Results, Logs, Metrics, Config)
+ * - Real-time updates via WebSocket
+ * - Full action support (rerun, download, delete, pause/resume)
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { crawlsApi, CrawlFullData } from '@/lib/api/client';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { showToast } from '@/lib/toast';
+import { Tabs, TabList, Tab, TabPanels, TabPanel } from '@/components/ui/Tabs';
+import { JobHeader } from '@/components/JobHeader';
+import { JobOverview } from '@/components/JobOverview';
+import { StateTimeline } from '@/components/StateTimeline';
+import { ProgressBreakdown } from '@/components/ProgressBreakdown';
+import { DocumentBrowser } from '@/components/DocumentBrowser';
+import { LogViewer } from '@/components/LogViewer';
+import { Analytics } from '@/components/Analytics';
+
+export default function JobDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const jobId = params.id as string;
+
+  const [job, setJob] = useState<CrawlFullData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // WebSocket for real-time updates
+  const { connected, on, off } = useWebSocket({ crawlId: jobId });
+
+  // Load job details
+  const loadJob = useCallback(async () => {
+    try {
+      const data = await crawlsApi.getById(jobId);
+      setJob(data);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to load job:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load job');
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId]);
+
+  // Initial load
+  useEffect(() => {
+    loadJob();
+  }, [loadJob]);
+
+  // Listen for WebSocket updates
+  useEffect(() => {
+    const handleStateChange = () => {
+      // Refresh job data on state change
+      loadJob();
+    };
+
+    const handleProgressUpdate = (message: any) => {
+      // Update progress in place
+      if (job && message.data) {
+        setJob((prev) =>
+          prev
+            ? {
+                ...prev,
+                // Update progress fields if available
+              }
+            : prev
+        );
+      }
+    };
+
+    on('state_change', handleStateChange);
+    on('STATE_CHANGE', handleStateChange);
+    on('progress_update', handleProgressUpdate);
+    on('PROGRESS_UPDATE', handleProgressUpdate);
+    on('crawl_completed', handleStateChange);
+    on('CRAWL_COMPLETED', handleStateChange);
+
+    return () => {
+      off('state_change', handleStateChange);
+      off('STATE_CHANGE', handleStateChange);
+      off('progress_update', handleProgressUpdate);
+      off('PROGRESS_UPDATE', handleProgressUpdate);
+      off('crawl_completed', handleStateChange);
+      off('CRAWL_COMPLETED', handleStateChange);
+    };
+  }, [on, off, job, loadJob]);
+
+  // Action handlers
+  const handleRerun = async () => {
+    try {
+      const response = await crawlsApi.rerun(jobId);
+      showToast.success('Crawl re-run started successfully');
+      // Navigate to the new crawl
+      router.push(`/dashboard/jobs/${response.new_crawl_id}`);
+    } catch (err) {
+      console.error('Failed to re-run:', err);
+      showToast.error('Failed to re-run crawl');
+      throw err;
+    }
+  };
+
+  const handleDownload = async (format: 'json' | 'jsonl' | 'csv') => {
+    try {
+      const data = await crawlsApi.download(jobId, format);
+      // Create and download file
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `crawl_${jobId}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast.success('Download started');
+    } catch (err) {
+      console.error('Failed to download:', err);
+      showToast.error('Failed to download');
+      throw err;
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this crawl? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await crawlsApi.delete(jobId);
+      showToast.success('Crawl deleted successfully');
+      router.push('/dashboard?tab=history');
+    } catch (err) {
+      console.error('Failed to delete:', err);
+      showToast.error('Failed to delete crawl');
+      throw err;
+    }
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Loading job details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !job) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Failed to load job
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            {error || 'Job not found'}
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={loadJob}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => router.push('/dashboard?tab=history')}
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Build progress data from job
+  const progressData = {
+    overall_percentage:
+      job.urls_total > 0
+        ? ((job.urls_crawled / job.urls_total) * 100)
+        : 0,
+    urls: {
+      total: job.urls_total,
+      completed: job.urls_crawled,
+      failed: job.urls_failed,
+    },
+    documents: {
+      total: job.documents_found,
+      completed: job.documents_found,
+    },
+    extractions: {
+      total: job.documents_found,
+      completed: job.documents_found,
+    },
+    processing: {
+      total: job.documents_found,
+      completed: job.status === 'completed' ? job.documents_found : 0,
+    },
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Job Header */}
+        <JobHeader
+          job={job}
+          onRerun={handleRerun}
+          onDownload={handleDownload}
+          onDelete={handleDelete}
+        />
+
+        {/* Connection status indicator */}
+        {connected && (
+          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            Live updates enabled
+          </div>
+        )}
+
+        {/* Main Content with Tabs */}
+        <Tabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        >
+          <TabList className="mb-6">
+            <Tab id="overview">Overview</Tab>
+            <Tab id="progress">Progress</Tab>
+            <Tab id="results" badge={job.documents_found}>
+              Results
+            </Tab>
+            <Tab id="logs" badge={job.events?.length}>
+              Logs
+            </Tab>
+            <Tab id="metrics">Metrics</Tab>
+            <Tab id="config">Configuration</Tab>
+          </TabList>
+
+          <TabPanels>
+            {/* Overview Tab */}
+            <TabPanel id="overview">
+              <JobOverview job={job} />
+            </TabPanel>
+
+            {/* Progress Tab */}
+            <TabPanel id="progress">
+              <div className="space-y-6">
+                <StateTimeline stateHistory={job.state_history || []} />
+                <ProgressBreakdown progress={progressData} />
+              </div>
+            </TabPanel>
+
+            {/* Results Tab */}
+            <TabPanel id="results">
+              <DocumentBrowser crawlId={jobId} />
+            </TabPanel>
+
+            {/* Logs Tab */}
+            <TabPanel id="logs">
+              <LogViewer crawlId={jobId} autoScroll={false} />
+            </TabPanel>
+
+            {/* Metrics Tab */}
+            <TabPanel id="metrics">
+              <Analytics crawlId={jobId} />
+            </TabPanel>
+
+            {/* Configuration Tab */}
+            <TabPanel id="config">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Crawl Configuration
+                </h3>
+                <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-auto text-sm text-gray-800 dark:text-gray-200">
+                  {JSON.stringify(job.config, null, 2)}
+                </pre>
+              </div>
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+      </div>
+    </div>
+  );
+}

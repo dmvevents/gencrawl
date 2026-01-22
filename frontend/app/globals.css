@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gc-bg: #f6f2eb;
+  --gc-surface: #ffffff;
+  --gc-surface-muted: #f2ede5;
+  --gc-ink: #0f172a;
+  --gc-muted: #5b6470;
+  --gc-border: rgba(15, 23, 42, 0.12);
+  --gc-accent: #0f766e;
+  --gc-accent-strong: #0b5f59;
+  --gc-accent-soft: rgba(15, 118, 110, 0.14);
+  --gc-glow: rgba(14, 116, 144, 0.14);
+  --gc-warning: #d97706;
+}
+
+.dark {
+  --gc-bg: #0b0f14;
+  --gc-surface: #101823;
+  --gc-surface-muted: #0f1620;
+  --gc-ink: #e2e8f0;
+  --gc-muted: #9aa4b2;
+  --gc-border: rgba(226, 232, 240, 0.12);
+  --gc-accent: #22c1b8;
+  --gc-accent-strong: #18a39c;
+  --gc-accent-soft: rgba(34, 193, 184, 0.16);
+  --gc-glow: rgba(45, 212, 191, 0.12);
+  --gc-warning: #f59e0b;
+}
+
+.gc-body {
+  color: var(--gc-ink);
+  background:
+    radial-gradient(900px 600px at -10% -20%, var(--gc-glow), transparent 60%),
+    radial-gradient(800px 520px at 100% 0%, rgba(217, 119, 6, 0.08), transparent 55%),
+    var(--gc-bg);
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+}
+
+.gc-panel {
+  background: var(--gc-surface);
+  border: 1px solid var(--gc-border);
+  border-radius: 20px;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+}
+
+.gc-panel-muted {
+  background: var(--gc-surface-muted);
+  border: 1px solid var(--gc-border);
+  border-radius: 16px;
+}
+
+.gc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--gc-accent-soft);
+  color: var(--gc-accent-strong);
+}
+
+.gc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  background: var(--gc-accent);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(15, 118, 110, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.gc-button:hover {
+  background: var(--gc-accent-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.24);
+}
+
+.gc-button-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  background: transparent;
+  border: 1px solid var(--gc-border);
+  color: var(--gc-ink);
+  transition: border 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.gc-button-secondary:hover {
+  border-color: var(--gc-accent);
+  color: var(--gc-accent-strong);
+  background: var(--gc-accent-soft);
+}
+
+.gc-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid var(--gc-border);
+  color: var(--gc-ink);
+  background: var(--gc-surface);
+  transition: border 0.2s ease, transform 0.2s ease, color 0.2s ease;
+}
+
+.gc-icon-button:hover {
+  border-color: var(--gc-accent);
+  color: var(--gc-accent-strong);
+  transform: translateY(-1px);
+}
+
+/* Custom Animations */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scroll {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(8px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in-up 0.5s ease-out;
+}
+
+.animate-scroll {
+  animation: scroll 2s ease-in-out infinite;
+}
+
+.delay-1000 {
+  animation-delay: 1s;
+}

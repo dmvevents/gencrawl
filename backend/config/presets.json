@@ -1,0 +1,684 @@
+{
+  "presets": [
+    {
+      "id": "conservative",
+      "name": "Conservative",
+      "description": "Low limits, high quality focus. Safe for production.",
+      "category": "general",
+      "icon": "Shield",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 1000,
+          "max_documents": 500,
+          "max_duration_minutes": 60,
+          "max_file_size_mb": 25,
+          "max_total_size_gb": 2,
+          "min_file_size_kb": 10,
+          "max_depth": 3,
+          "max_retries": 5,
+          "timeout_seconds": 90,
+          "enable_budget_controls": true,
+          "pause_at_limit": true
+        },
+        "quality": {
+          "min_quality_score": 0.8,
+          "min_relevance_score": 0.7,
+          "max_duplicate_percentage": 5,
+          "min_text_length": 200,
+          "require_date": false,
+          "require_metadata": ["title", "author"],
+          "stop_on_quality_drop": true,
+          "quality_threshold_percentage": 70,
+          "quality_check_interval": 50,
+          "quality_gate_action": "pause"
+        },
+        "performance": {
+          "concurrent_requests": 5,
+          "delay_seconds": 2.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Conservative)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 3,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.9,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false,
+          "max_filename_length": 200,
+          "include_failed_urls": true
+        },
+        "budget": {
+          "max_api_cost_usd": 5.0,
+          "warn_at_percentage": 70,
+          "pause_at_percentage": 90,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.001
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#crawl-alerts", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    },
+    {
+      "id": "balanced",
+      "name": "Balanced",
+      "description": "Moderate settings for everyday use. Good balance of speed and quality.",
+      "category": "general",
+      "icon": "Scale",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 10000,
+          "max_documents": 5000,
+          "max_duration_minutes": 360,
+          "max_file_size_mb": 50,
+          "max_total_size_gb": 10,
+          "min_file_size_kb": 10,
+          "max_depth": 5,
+          "max_retries": 3,
+          "timeout_seconds": 60,
+          "enable_budget_controls": true,
+          "pause_at_limit": true
+        },
+        "quality": {
+          "min_quality_score": 0.7,
+          "min_relevance_score": 0.6,
+          "max_duplicate_percentage": 10,
+          "min_text_length": 100,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 50,
+          "quality_check_interval": 100,
+          "quality_gate_action": "continue"
+        },
+        "performance": {
+          "concurrent_requests": 10,
+          "delay_seconds": 1.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Balanced)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false,
+          "max_filename_length": 200,
+          "include_failed_urls": true
+        },
+        "budget": {
+          "max_api_cost_usd": 10.0,
+          "warn_at_percentage": 80,
+          "pause_at_percentage": 95,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.001
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#crawl-alerts", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    },
+    {
+      "id": "aggressive",
+      "name": "Aggressive",
+      "description": "High limits, fast crawling. Use with caution - may get rate limited.",
+      "category": "general",
+      "icon": "Rocket",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 50000,
+          "max_documents": 25000,
+          "max_duration_minutes": 720,
+          "max_file_size_mb": 100,
+          "max_total_size_gb": 50,
+          "min_file_size_kb": 5,
+          "max_depth": 10,
+          "max_retries": 2,
+          "timeout_seconds": 30,
+          "enable_budget_controls": true,
+          "pause_at_limit": false
+        },
+        "quality": {
+          "min_quality_score": 0.5,
+          "min_relevance_score": 0.4,
+          "max_duplicate_percentage": 20,
+          "min_text_length": 50,
+          "require_date": false,
+          "require_metadata": [],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 30,
+          "quality_check_interval": 200,
+          "quality_gate_action": "continue"
+        },
+        "performance": {
+          "concurrent_requests": 25,
+          "delay_seconds": 0.5,
+          "respect_robots_txt": false,
+          "user_agent": "GenCrawl/1.0 (Fast)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 10,
+          "adaptive_delay": false,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": false,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": false,
+          "dedupe_threshold": 0.8,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": false,
+          "content_classification": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": false,
+          "create_manifest": true,
+          "hierarchical_structure": false,
+          "preserve_filenames": false,
+          "add_timestamps": false,
+          "compress_output": true,
+          "max_filename_length": 100,
+          "include_failed_urls": false
+        },
+        "budget": {
+          "max_api_cost_usd": 50.0,
+          "warn_at_percentage": 90,
+          "pause_at_percentage": 100,
+          "hard_stop_at_100": false,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.001
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": false, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#crawl-alerts", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    },
+    {
+      "id": "education",
+      "name": "Education Materials",
+      "description": "Optimized for crawling educational content, past papers, and curriculum materials.",
+      "category": "education",
+      "icon": "GraduationCap",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 5000,
+          "max_documents": 2500,
+          "max_duration_minutes": 180,
+          "max_file_size_mb": 100,
+          "max_total_size_gb": 20,
+          "min_file_size_kb": 50,
+          "max_depth": 4,
+          "max_retries": 3,
+          "timeout_seconds": 90,
+          "enable_budget_controls": true,
+          "pause_at_limit": true
+        },
+        "quality": {
+          "min_quality_score": 0.75,
+          "min_relevance_score": 0.7,
+          "max_duplicate_percentage": 5,
+          "min_text_length": 500,
+          "require_date": true,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": true,
+          "quality_threshold_percentage": 60,
+          "quality_check_interval": 50,
+          "quality_gate_action": "pause"
+        },
+        "performance": {
+          "concurrent_requests": 8,
+          "delay_seconds": 1.5,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Educational Research Bot)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": true,
+          "run_ocr": true,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.9,
+          "enable_pii_redaction": false,
+          "generate_embeddings": true,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": true
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false,
+          "max_filename_length": 200,
+          "include_failed_urls": true
+        },
+        "budget": {
+          "max_api_cost_usd": 15.0,
+          "warn_at_percentage": 75,
+          "pause_at_percentage": 90,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.002
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#edu-crawls", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    },
+    {
+      "id": "legal",
+      "name": "Legal Documents",
+      "description": "Configured for legal research, court opinions, and statutory documents.",
+      "category": "legal",
+      "icon": "Scale",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 3000,
+          "max_documents": 1500,
+          "max_duration_minutes": 240,
+          "max_file_size_mb": 75,
+          "max_total_size_gb": 15,
+          "min_file_size_kb": 20,
+          "max_depth": 3,
+          "max_retries": 4,
+          "timeout_seconds": 120,
+          "enable_budget_controls": true,
+          "pause_at_limit": true
+        },
+        "quality": {
+          "min_quality_score": 0.85,
+          "min_relevance_score": 0.8,
+          "max_duplicate_percentage": 3,
+          "min_text_length": 1000,
+          "require_date": true,
+          "require_metadata": ["title", "date"],
+          "stop_on_quality_drop": true,
+          "quality_threshold_percentage": 75,
+          "quality_check_interval": 25,
+          "quality_gate_action": "pause"
+        },
+        "performance": {
+          "concurrent_requests": 5,
+          "delay_seconds": 2.5,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Legal Research Bot)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 3,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": true,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.95,
+          "enable_pii_redaction": true,
+          "generate_embeddings": true,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": true
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false,
+          "max_filename_length": 250,
+          "include_failed_urls": true
+        },
+        "budget": {
+          "max_api_cost_usd": 20.0,
+          "warn_at_percentage": 70,
+          "pause_at_percentage": 85,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.003
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#legal-crawls", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    },
+    {
+      "id": "research",
+      "name": "Academic Research",
+      "description": "Optimized for arxiv, academic papers, and research publications.",
+      "category": "research",
+      "icon": "BookOpen",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 15000,
+          "max_documents": 10000,
+          "max_duration_minutes": 480,
+          "max_file_size_mb": 100,
+          "max_total_size_gb": 50,
+          "min_file_size_kb": 100,
+          "max_depth": 2,
+          "max_retries": 3,
+          "timeout_seconds": 90,
+          "enable_budget_controls": true,
+          "pause_at_limit": true
+        },
+        "quality": {
+          "min_quality_score": 0.8,
+          "min_relevance_score": 0.75,
+          "max_duplicate_percentage": 5,
+          "min_text_length": 2000,
+          "require_date": true,
+          "require_metadata": ["title", "author"],
+          "stop_on_quality_drop": true,
+          "quality_threshold_percentage": 65,
+          "quality_check_interval": 100,
+          "quality_gate_action": "continue"
+        },
+        "performance": {
+          "concurrent_requests": 8,
+          "delay_seconds": 1.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Academic Research Bot)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": true,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.9,
+          "enable_pii_redaction": false,
+          "generate_embeddings": true,
+          "run_nemo_curator": true,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": true
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false,
+          "max_filename_length": 200,
+          "include_failed_urls": true
+        },
+        "budget": {
+          "max_api_cost_usd": 30.0,
+          "warn_at_percentage": 75,
+          "pause_at_percentage": 90,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.002
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#research-crawls", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    },
+    {
+      "id": "news",
+      "name": "News & Media",
+      "description": "Fast crawling for news sites and media content. Emphasis on recency.",
+      "category": "news",
+      "icon": "Newspaper",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 20000,
+          "max_documents": 15000,
+          "max_duration_minutes": 120,
+          "max_file_size_mb": 25,
+          "max_total_size_gb": 5,
+          "min_file_size_kb": 5,
+          "max_depth": 3,
+          "max_retries": 2,
+          "timeout_seconds": 30,
+          "enable_budget_controls": true,
+          "pause_at_limit": false
+        },
+        "quality": {
+          "min_quality_score": 0.6,
+          "min_relevance_score": 0.5,
+          "max_duplicate_percentage": 15,
+          "min_text_length": 100,
+          "require_date": true,
+          "require_metadata": ["title", "date"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 40,
+          "quality_check_interval": 200,
+          "quality_gate_action": "continue"
+        },
+        "performance": {
+          "concurrent_requests": 20,
+          "delay_seconds": 0.5,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (News Aggregator)",
+          "enable_caching": false,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": false,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.8,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": true
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": false,
+          "create_manifest": true,
+          "hierarchical_structure": false,
+          "preserve_filenames": false,
+          "add_timestamps": true,
+          "compress_output": true,
+          "max_filename_length": 100,
+          "include_failed_urls": false
+        },
+        "budget": {
+          "max_api_cost_usd": 10.0,
+          "warn_at_percentage": 85,
+          "pause_at_percentage": 95,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.0005
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": false, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#news-crawls", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    },
+    {
+      "id": "caribbean-sea",
+      "name": "Caribbean SEA Materials",
+      "description": "Specialized preset for Trinidad & Tobago SEA past papers and curriculum.",
+      "category": "education",
+      "icon": "GraduationCap",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 2000,
+          "max_documents": 1000,
+          "max_duration_minutes": 120,
+          "max_file_size_mb": 50,
+          "max_total_size_gb": 5,
+          "min_file_size_kb": 50,
+          "max_depth": 4,
+          "max_retries": 4,
+          "timeout_seconds": 90,
+          "enable_budget_controls": true,
+          "pause_at_limit": true
+        },
+        "quality": {
+          "min_quality_score": 0.7,
+          "min_relevance_score": 0.65,
+          "max_duplicate_percentage": 5,
+          "min_text_length": 200,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": true,
+          "quality_threshold_percentage": 60,
+          "quality_check_interval": 25,
+          "quality_gate_action": "pause"
+        },
+        "performance": {
+          "concurrent_requests": 5,
+          "delay_seconds": 2.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Caribbean Education Bot)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": true,
+          "run_ocr": true,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.9,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": true
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false,
+          "max_filename_length": 200,
+          "include_failed_urls": true
+        },
+        "budget": {
+          "max_api_cost_usd": 10.0,
+          "warn_at_percentage": 75,
+          "pause_at_percentage": 90,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.002
+        },
+        "notifications": {
+          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
+          "slack": { "enabled": false, "webhook_url": "", "channel": "#sea-crawls", "on_complete": true, "on_failure": true },
+          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+        }
+      }
+    }
+  ]
+}

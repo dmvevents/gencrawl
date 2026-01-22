@@ -1,0 +1,676 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-01-20T12:00:00Z",
+  "templates": [
+    {
+      "id": "sea-materials",
+      "name": "Caribbean SEA Materials",
+      "description": "Find all SEA (Secondary Entrance Assessment) past papers and curriculum guides from Trinidad & Tobago Ministry of Education",
+      "category": "education",
+      "icon": "book-open",
+      "is_builtin": true,
+      "tags": ["sea", "trinidad", "primary", "past papers", "curriculum"],
+      "config": {
+        "targets": ["moe.gov.tt", "sea.gov.tt", "ttconnect.gov.tt"],
+        "keywords": ["SEA", "past paper", "curriculum", "primary school", "standard 5"],
+        "file_types": ["pdf"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 5000,
+          "max_documents": 1000,
+          "max_duration_minutes": 120,
+          "max_file_size_mb": 50,
+          "max_total_size_gb": 5.0,
+          "min_file_size_kb": 10,
+          "max_depth": 5,
+          "max_retries": 3,
+          "timeout_seconds": 60
+        },
+        "quality": {
+          "min_quality_score": 0.7,
+          "min_relevance_score": 0.6,
+          "max_duplicate_percentage": 10,
+          "min_text_length": 100,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 50
+        },
+        "performance": {
+          "concurrent_requests": 10,
+          "delay_seconds": 1.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Educational Content Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "cxc-csec",
+      "name": "CXC CSEC Past Papers",
+      "description": "Download CXC Caribbean Secondary Education Certificate (CSEC) examination papers and mark schemes",
+      "category": "education",
+      "icon": "file-text",
+      "is_builtin": true,
+      "tags": ["cxc", "csec", "caribbean", "secondary", "exams"],
+      "config": {
+        "targets": ["cxc.org", "cxcregistration.com"],
+        "keywords": ["CSEC", "past paper", "examination", "mark scheme", "syllabus"],
+        "file_types": ["pdf"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 10000,
+          "max_documents": 5000,
+          "max_duration_minutes": 240,
+          "max_file_size_mb": 50,
+          "max_total_size_gb": 10.0,
+          "min_file_size_kb": 10,
+          "max_depth": 5,
+          "max_retries": 3,
+          "timeout_seconds": 60
+        },
+        "quality": {
+          "min_quality_score": 0.7,
+          "min_relevance_score": 0.6,
+          "max_duplicate_percentage": 10,
+          "min_text_length": 100,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 50
+        },
+        "performance": {
+          "concurrent_requests": 10,
+          "delay_seconds": 1.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Educational Content Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "cxc-cape",
+      "name": "CXC CAPE Past Papers",
+      "description": "Download CXC Caribbean Advanced Proficiency Examination (CAPE) papers and resources",
+      "category": "education",
+      "icon": "graduation-cap",
+      "is_builtin": true,
+      "tags": ["cxc", "cape", "caribbean", "advanced", "sixth form"],
+      "config": {
+        "targets": ["cxc.org"],
+        "keywords": ["CAPE", "past paper", "unit 1", "unit 2", "module", "syllabus"],
+        "file_types": ["pdf"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 10000,
+          "max_documents": 5000,
+          "max_duration_minutes": 240,
+          "max_file_size_mb": 50,
+          "max_total_size_gb": 10.0,
+          "min_file_size_kb": 10,
+          "max_depth": 5,
+          "max_retries": 3,
+          "timeout_seconds": 60
+        },
+        "quality": {
+          "min_quality_score": 0.7,
+          "min_relevance_score": 0.6,
+          "max_duplicate_percentage": 10,
+          "min_text_length": 100,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 50
+        },
+        "performance": {
+          "concurrent_requests": 10,
+          "delay_seconds": 1.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Educational Content Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "tt-legal",
+      "name": "Trinidad Legal Documents",
+      "description": "Trinidad & Tobago legal statutes, court opinions, and legislation from official sources",
+      "category": "legal",
+      "icon": "scale",
+      "is_builtin": true,
+      "tags": ["legal", "trinidad", "statutes", "court", "legislation"],
+      "config": {
+        "targets": ["ttlawcourts.org", "legalaffairs.gov.tt", "agla.gov.tt"],
+        "keywords": ["statute", "legislation", "court opinion", "judgment", "act", "regulation"],
+        "file_types": ["pdf", "doc", "docx"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 20000,
+          "max_documents": 10000,
+          "max_duration_minutes": 360,
+          "max_file_size_mb": 100,
+          "max_total_size_gb": 20.0,
+          "min_file_size_kb": 5,
+          "max_depth": 7,
+          "max_retries": 3,
+          "timeout_seconds": 90
+        },
+        "quality": {
+          "min_quality_score": 0.6,
+          "min_relevance_score": 0.5,
+          "max_duplicate_percentage": 15,
+          "min_text_length": 200,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 40
+        },
+        "performance": {
+          "concurrent_requests": 8,
+          "delay_seconds": 1.5,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Legal Research Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": true,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.80,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "arxiv-ml",
+      "name": "Academic Papers (ArXiv)",
+      "description": "Recent machine learning and AI research papers from arXiv",
+      "category": "research",
+      "icon": "flask",
+      "is_builtin": true,
+      "tags": ["arxiv", "research", "machine learning", "ai", "academic"],
+      "config": {
+        "targets": ["arxiv.org"],
+        "keywords": ["machine learning", "neural network", "deep learning", "transformer", "LLM"],
+        "file_types": ["pdf"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 5000,
+          "max_documents": 2000,
+          "max_duration_minutes": 180,
+          "max_file_size_mb": 50,
+          "max_total_size_gb": 10.0,
+          "min_file_size_kb": 50,
+          "max_depth": 3,
+          "max_retries": 3,
+          "timeout_seconds": 60
+        },
+        "quality": {
+          "min_quality_score": 0.8,
+          "min_relevance_score": 0.7,
+          "max_duplicate_percentage": 5,
+          "min_text_length": 500,
+          "require_date": true,
+          "require_metadata": ["title", "authors"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 60
+        },
+        "performance": {
+          "concurrent_requests": 5,
+          "delay_seconds": 2.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Academic Research Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 3
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.90,
+          "enable_pii_redaction": false,
+          "generate_embeddings": true,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "news-articles",
+      "name": "News Articles",
+      "description": "General news article crawler for major news sites",
+      "category": "news",
+      "icon": "newspaper",
+      "is_builtin": true,
+      "tags": ["news", "articles", "media", "journalism"],
+      "config": {
+        "targets": [],
+        "keywords": ["news", "article", "report", "breaking"],
+        "file_types": ["html", "pdf"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 1000,
+          "max_documents": 500,
+          "max_duration_minutes": 60,
+          "max_file_size_mb": 20,
+          "max_total_size_gb": 2.0,
+          "min_file_size_kb": 1,
+          "max_depth": 3,
+          "max_retries": 2,
+          "timeout_seconds": 30
+        },
+        "quality": {
+          "min_quality_score": 0.6,
+          "min_relevance_score": 0.5,
+          "max_duplicate_percentage": 20,
+          "min_text_length": 200,
+          "require_date": true,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 40
+        },
+        "performance": {
+          "concurrent_requests": 5,
+          "delay_seconds": 2.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (News Aggregator)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": false,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": false,
+          "create_manifest": true,
+          "hierarchical_structure": false,
+          "preserve_filenames": false,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "govt-publications",
+      "name": "Government Publications",
+      "description": "Government reports, publications, and official documents",
+      "category": "government",
+      "icon": "building",
+      "is_builtin": true,
+      "tags": ["government", "official", "reports", "publications", "policy"],
+      "config": {
+        "targets": [],
+        "keywords": ["report", "publication", "policy", "white paper", "official"],
+        "file_types": ["pdf", "doc", "docx"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 10000,
+          "max_documents": 5000,
+          "max_duration_minutes": 240,
+          "max_file_size_mb": 100,
+          "max_total_size_gb": 15.0,
+          "min_file_size_kb": 10,
+          "max_depth": 5,
+          "max_retries": 3,
+          "timeout_seconds": 60
+        },
+        "quality": {
+          "min_quality_score": 0.6,
+          "min_relevance_score": 0.5,
+          "max_duplicate_percentage": 10,
+          "min_text_length": 200,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 50
+        },
+        "performance": {
+          "concurrent_requests": 8,
+          "delay_seconds": 1.5,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Government Document Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "research-data",
+      "name": "Research Data",
+      "description": "Scientific research data and datasets from research repositories",
+      "category": "research",
+      "icon": "database",
+      "is_builtin": true,
+      "tags": ["research", "data", "datasets", "science", "open data"],
+      "config": {
+        "targets": ["zenodo.org", "figshare.com", "data.gov"],
+        "keywords": ["dataset", "research data", "raw data", "open data"],
+        "file_types": ["csv", "json", "xlsx", "pdf", "zip"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 5000,
+          "max_documents": 2000,
+          "max_duration_minutes": 180,
+          "max_file_size_mb": 200,
+          "max_total_size_gb": 50.0,
+          "min_file_size_kb": 1,
+          "max_depth": 4,
+          "max_retries": 3,
+          "timeout_seconds": 120
+        },
+        "quality": {
+          "min_quality_score": 0.5,
+          "min_relevance_score": 0.5,
+          "max_duplicate_percentage": 10,
+          "min_text_length": 50,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 40
+        },
+        "performance": {
+          "concurrent_requests": 5,
+          "delay_seconds": 2.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Research Data Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": true
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "market-reports",
+      "name": "Market Reports",
+      "description": "Industry market reports and analysis documents",
+      "category": "research",
+      "icon": "trending-up",
+      "is_builtin": true,
+      "tags": ["market", "industry", "reports", "analysis", "business"],
+      "config": {
+        "targets": [],
+        "keywords": ["market report", "industry analysis", "forecast", "market size", "market share"],
+        "file_types": ["pdf"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 2000,
+          "max_documents": 500,
+          "max_duration_minutes": 120,
+          "max_file_size_mb": 100,
+          "max_total_size_gb": 10.0,
+          "min_file_size_kb": 50,
+          "max_depth": 4,
+          "max_retries": 3,
+          "timeout_seconds": 60
+        },
+        "quality": {
+          "min_quality_score": 0.75,
+          "min_relevance_score": 0.7,
+          "max_duplicate_percentage": 5,
+          "min_text_length": 500,
+          "require_date": true,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 60
+        },
+        "performance": {
+          "concurrent_requests": 5,
+          "delay_seconds": 2.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Market Research Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.90,
+          "enable_pii_redaction": false,
+          "generate_embeddings": true,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    },
+    {
+      "id": "tech-docs",
+      "name": "Technical Documentation",
+      "description": "Technical documentation, API docs, and developer guides",
+      "category": "technical",
+      "icon": "code",
+      "is_builtin": true,
+      "tags": ["technical", "documentation", "api", "developer", "docs"],
+      "config": {
+        "targets": [],
+        "keywords": ["documentation", "api", "guide", "reference", "tutorial", "getting started"],
+        "file_types": ["html", "md", "pdf"],
+        "crawler": "crawl4ai",
+        "limits": {
+          "max_pages": 5000,
+          "max_documents": 2000,
+          "max_duration_minutes": 120,
+          "max_file_size_mb": 20,
+          "max_total_size_gb": 5.0,
+          "min_file_size_kb": 1,
+          "max_depth": 10,
+          "max_retries": 3,
+          "timeout_seconds": 30
+        },
+        "quality": {
+          "min_quality_score": 0.6,
+          "min_relevance_score": 0.5,
+          "max_duplicate_percentage": 15,
+          "min_text_length": 100,
+          "require_date": false,
+          "require_metadata": ["title"],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 50
+        },
+        "performance": {
+          "concurrent_requests": 15,
+          "delay_seconds": 0.5,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Documentation Crawler)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 5
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.85,
+          "enable_pii_redaction": false,
+          "generate_embeddings": true,
+          "run_nemo_curator": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": false,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false
+        }
+      },
+      "used_count": 0
+    }
+  ]
+}
