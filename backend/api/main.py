@@ -4,7 +4,10 @@ from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
 
+# Load environment from repo-local and container-mounted config if present
 load_dotenv(dotenv_path="../.env")
+load_dotenv(dotenv_path="../config/runtime.env")
+load_dotenv(dotenv_path="/app/config/runtime.env")
 
 
 # Global WebSocket manager for real-time updates

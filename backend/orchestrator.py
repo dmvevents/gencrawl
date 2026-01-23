@@ -6,6 +6,11 @@ import logging
 import re
 import httpx
 
+try:
+    from services.web_search import WebSearchClient
+except Exception:  # pragma: no cover - optional dependency
+    WebSearchClient = None
+
 logger = logging.getLogger(__name__)
 
 class LLMOrchestrator:
@@ -116,7 +121,9 @@ Generate only valid JSON, no extra text."""
             logger.warning("LLM config generation failed, using heuristic fallback: %s", exc)
             config = self._heuristic_config(user_query, f"LLM error: {exc}")
 
-        return self._finalize_config(config, user_query, overrides)
+        config = self._finalize_config(config, user_query, overrides)
+        config = self._apply_web_search(config, user_query)
+        return config
 
     def _finalize_config(
         self,
@@ -185,6 +192,62 @@ Generate only valid JSON, no extra text."""
             if filters_override:
                 config["filters"] = filters_override
 
+        return config
+
+    def _apply_web_search(self, config: Dict[str, Any], user_query: str) -> Dict[str, Any]:
+        """Augment targets using web search when strategy is search-based or targets are missing."""
+        enabled = os.getenv("WEB_SEARCH_ENABLE", "false").lower() == "true"
+        if not enabled or WebSearchClient is None:
+            return config
+
+        strategy = (config.get("strategy") or "").lower()
+        targets = config.get("targets") or []
+        if targets and strategy != "search-based":
+            return config
+
+        max_results = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "10"))
+        domain_limit = int(os.getenv("WEB_SEARCH_DOMAIN_LIMIT", "5"))
+        allowlist_raw = os.getenv("WEB_SEARCH_DOMAIN_ALLOWLIST", "").strip()
+        allowlist = [d.strip().lower() for d in allowlist_raw.split(",") if d.strip()] if allowlist_raw else []
+
+        try:
+            client = WebSearchClient()
+            search_result = client.search(query=user_query, limit=max_results)
+        except Exception as exc:
+            config.setdefault("web_search", {})["error"] = str(exc)
+            return config
+
+        urls = [r.get("url") for r in search_result.get("results", []) if r.get("url")]
+        if allowlist:
+            filtered = []
+            for url in urls:
+                match = re.match(r"https?://([^/]+)", url or "")
+                if not match:
+                    continue
+                domain = match.group(1).lower()
+                if any(domain.endswith(a) for a in allowlist):
+                    filtered.append(url)
+            urls = filtered
+        domains: List[str] = []
+        for url in urls:
+            match = re.match(r"https?://([^/]+)", url)
+            if not match:
+                continue
+            domain = match.group(1)
+            if domain not in domains:
+                domains.append(domain)
+            if len(domains) >= domain_limit:
+                break
+
+        if domains:
+            config["targets"] = [f"https://{d}" for d in domains]
+            if strategy == "search-based":
+                config["strategy"] = "recursive"
+
+        config["web_search"] = {
+            "provider": search_result.get("provider"),
+            "results": search_result.get("results", []),
+        }
         return config
 
     def _resolve_provider(self) -> str:

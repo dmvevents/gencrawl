@@ -26,6 +26,8 @@ wheels/
 # Environment
 .env
 .env.local
+config/runtime.env
+config/runtime.env.local
 
 # Data & Logs
 data/**

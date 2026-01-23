@@ -94,6 +94,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./config:/app/config:ro
       - ${HOME}/.config/gcloud/application_default_credentials.json:/app/gcloud_adc.json:ro
 
   dashboard:
