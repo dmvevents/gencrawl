@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 from typing import Optional, Tuple
 
@@ -46,13 +47,47 @@ def _vision_request(image_bytes: bytes, api_key: Optional[str], access_token: Op
     with httpx.Client(timeout=60) as client:
         resp = client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
-        return resp.json()
+    return resp.json()
+
+
+def _load_adc_access_token() -> Optional[str]:
+    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if not credentials_path:
+        return None
+    try:
+        with open(credentials_path, "r") as handle:
+            data = json.load(handle)
+    except Exception:
+        return None
+    if data.get("type") != "authorized_user":
+        return None
+    refresh_token = data.get("refresh_token")
+    client_id = data.get("client_id")
+    client_secret = data.get("client_secret")
+    token_uri = data.get("token_uri") or "https://oauth2.googleapis.com/token"
+    if not (refresh_token and client_id and client_secret):
+        return None
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(
+                token_uri,
+                data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "refresh_token": refresh_token,
+                    "grant_type": "refresh_token",
+                },
+            )
+            resp.raise_for_status()
+            return resp.json().get("access_token")
+    except Exception:
+        return None
 
 
 def vision_ocr_pdf_bytes(pdf_bytes: bytes) -> Tuple[str, str, Optional[str]]:
     """Run Vision OCR for a PDF by rendering pages to images and concatenating text."""
     api_key = os.getenv("GOOGLE_API_KEY")
-    access_token = os.getenv("GOOGLE_OAUTH_ACCESS_TOKEN")
+    access_token = os.getenv("GOOGLE_OAUTH_ACCESS_TOKEN") or _load_adc_access_token()
     quota_project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
 
     page_limit_env = os.getenv("INGESTION_VISION_PAGE_LIMIT", "").strip()

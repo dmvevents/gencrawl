@@ -53,6 +53,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       GOOGLE_OAUTH_ACCESS_TOKEN: ${GOOGLE_OAUTH_ACCESS_TOKEN}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcloud_adc.json
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       LLM_PROVIDER: ${LLM_PROVIDER}
@@ -83,6 +84,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/app/gcloud_adc.json:ro
 
   dashboard:
     build:
