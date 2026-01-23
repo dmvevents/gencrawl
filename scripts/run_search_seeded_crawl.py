@@ -22,12 +22,17 @@ DEFAULT_HEADERS = {
 }
 
 
-def download_with_retries(client: httpx.Client, url: str, max_retries: int = 3) -> httpx.Response | None:
+def download_with_retries(
+    client: httpx.Client,
+    url: str,
+    max_retries: int = 2,
+    max_delay: float = 6.0,
+) -> httpx.Response | None:
     for attempt in range(max_retries):
         try:
             resp = client.get(url, follow_redirects=True)
         except Exception:
-            time.sleep(1.5 * (2 ** attempt))
+            time.sleep(min(1.5 * (2 ** attempt), max_delay))
             continue
         if resp.headers.get("cf-mitigated"):
             return None
@@ -43,7 +48,7 @@ def download_with_retries(client: httpx.Client, url: str, max_retries: int = 3) 
                     delay = None
             if delay is None:
                 delay = 1.5 * (2 ** attempt)
-            time.sleep(delay)
+            time.sleep(min(delay, max_delay))
             continue
         return None
     return None
@@ -71,6 +76,8 @@ def main() -> None:
     parser.add_argument("--query", required=True)
     parser.add_argument("--max-docs", type=int, default=200)
     parser.add_argument("--out-root", default="data/crawl_runs")
+    parser.add_argument("--download-retries", type=int, default=2)
+    parser.add_argument("--download-delay", type=float, default=6.0)
     args = parser.parse_args()
 
     # Submit crawl (orchestrator will auto-seed targets via web search)
@@ -93,23 +100,34 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest = []
 
+    downloaded = 0
+    blocked = 0
+
     with httpx.Client(timeout=60, headers=DEFAULT_HEADERS) as client:
         for idx, doc in enumerate(docs, start=1):
             url = doc.get("url") or ""
             if not url:
                 continue
-            response = download_with_retries(client, url)
+            response = download_with_retries(
+                client,
+                url,
+                max_retries=args.download_retries,
+                max_delay=args.download_delay,
+            )
             if not response:
+                blocked += 1
                 continue
             name = url.split("?", 1)[0].split("/")[-1] or f"document_{idx}.pdf"
             out_path = out_dir / f"{idx:04d}_{name}"
             out_path.write_bytes(response.content)
             manifest.append({"url": url, "path": str(out_path)})
+            downloaded += 1
 
     manifest_path = Path(args.out_root) / crawl_id / "manifest.json"
     manifest_path.write_text(json.dumps({"crawl_id": crawl_id, "count": len(manifest), "documents": manifest}, indent=2))
 
-    print("downloaded", len(manifest))
+    print("downloaded", downloaded)
+    print("blocked_or_failed", blocked)
     print("manifest", manifest_path)
 
 
