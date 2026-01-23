@@ -238,7 +238,9 @@ def main() -> None:
             vision_total += length
             vision_details[page_num] = {"text_length": length}
         except Exception as exc:
-            vision_details[page_num] = {"error": str(exc)}
+            message = str(exc)
+            message = re.sub(r"(\\?.*)$", "", message) if "vision.googleapis.com" in message else message
+            vision_details[page_num] = {"error": message}
     summary["results"]["vision"] = {"page_limit": len(pages), "text_length": vision_total, "pages": vision_details}
 
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))

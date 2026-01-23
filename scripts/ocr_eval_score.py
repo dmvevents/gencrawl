@@ -35,6 +35,8 @@ def main() -> None:
 
     provider_stats: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
     provider_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    gcp_stats: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    gcp_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     overlap_scores: List[float] = []
 
@@ -69,8 +71,40 @@ def main() -> None:
         "run_id": args.run_id,
         "pages_total": len(page_dirs),
         "providers": {},
+        "gcp": {},
         "openai_gemini_text_jaccard_avg": round(sum(overlap_scores) / len(overlap_scores), 4) if overlap_scores else None,
     }
+
+    # Aggregate GCP OCR summaries if present
+    gcp_root = base / "gcp"
+    if gcp_root.exists():
+        for summary_path in gcp_root.rglob("summary.json"):
+            try:
+                data = json.loads(summary_path.read_text())
+            except Exception:
+                continue
+            results = data.get("results") or {}
+            for key in ("docai_ocr", "docai_layout", "vision"):
+                entry = results.get(key) or {}
+                gcp_counts[key]["docs"] += 1
+                if "error" in entry:
+                    gcp_counts[key]["errors"] += 1
+                    continue
+                if key == "vision" and isinstance(entry.get("pages"), dict):
+                    page_errors = sum(1 for v in entry["pages"].values() if isinstance(v, dict) and "error" in v)
+                    if page_errors:
+                        gcp_counts[key]["errors"] += 1
+                text_len = entry.get("text_length")
+                if isinstance(text_len, (int, float)):
+                    gcp_stats[key]["text_len_sum"] += float(text_len)
+
+    for key, counts in gcp_counts.items():
+        docs = counts.get("docs", 0)
+        summary["gcp"][key] = {
+            "docs": docs,
+            "errors": counts.get("errors", 0),
+            "avg_text_len": round(gcp_stats[key].get("text_len_sum", 0) / docs, 2) if docs else 0,
+        }
 
     for provider, counts in provider_counts.items():
         pages = counts.get("pages", 0)
@@ -105,6 +139,18 @@ def main() -> None:
                 "",
             ]
         )
+    if summary["gcp"]:
+        report_lines.append("## GCP OCR")
+        for key, stats in summary["gcp"].items():
+            report_lines.extend(
+                [
+                    f"### {key}",
+                    f"- docs: {stats['docs']}",
+                    f"- errors: {stats['errors']}",
+                    f"- avg text length: {stats['avg_text_len']}",
+                    "",
+                ]
+            )
     if summary["openai_gemini_text_jaccard_avg"] is not None:
         report_lines.append(
             f"OpenAI vs Gemini text overlap (Jaccard avg): {summary['openai_gemini_text_jaccard_avg']}"
