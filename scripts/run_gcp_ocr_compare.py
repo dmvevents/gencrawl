@@ -96,6 +96,17 @@ def render_pages(
     return pages
 
 
+def truncate_pdf(pdf_bytes: bytes, page_limit: int) -> bytes:
+    if page_limit <= 0:
+        return pdf_bytes
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    if doc.page_count <= page_limit:
+        return pdf_bytes
+    out = fitz.open()
+    out.insert_pdf(doc, from_page=0, to_page=page_limit - 1)
+    return out.tobytes()
+
+
 def docai_process(
     pdf_bytes: bytes,
     project_id: str,
@@ -177,9 +188,11 @@ def main() -> None:
 
     summary: Dict[str, object] = {"source": args.pdf_url or args.pdf_path, "results": {}}
 
+    docai_pdf = truncate_pdf(pdf_bytes, args.page_limit)
+
     if args.project_id and args.docai_ocr_processor and access_token:
         start = time.time()
-        response = docai_process(pdf_bytes, args.project_id, args.location, args.docai_ocr_processor, access_token)
+        response = docai_process(docai_pdf, args.project_id, args.location, args.docai_ocr_processor, access_token)
         duration = time.time() - start
         (out_dir / "docai_ocr.json").write_text(json.dumps(response, indent=2))
         summary["results"]["docai_ocr"] = {
@@ -191,7 +204,7 @@ def main() -> None:
 
     if args.project_id and args.docai_layout_processor and access_token:
         start = time.time()
-        response = docai_process(pdf_bytes, args.project_id, args.location, args.docai_layout_processor, access_token)
+        response = docai_process(docai_pdf, args.project_id, args.location, args.docai_layout_processor, access_token)
         duration = time.time() - start
         (out_dir / "docai_layout.json").write_text(json.dumps(response, indent=2))
         summary["results"]["docai_layout"] = {
