@@ -282,6 +282,58 @@ class DomainResolver:
         return result
 
 
+class HttpCache:
+    def __init__(self, cache_path: Path) -> None:
+        enabled_env = os.getenv("INGESTION_HTTP_CACHE", "true").lower()
+        self.enabled = enabled_env not in {"0", "false", "no"}
+        self.cache_path = cache_path
+        self.records: Dict[str, Dict[str, Any]] = {}
+        self._dirty = False
+        if self.enabled and cache_path.exists():
+            try:
+                self.records = json.loads(cache_path.read_text())
+            except Exception:
+                self.records = {}
+
+    def headers_for(self, url: str) -> Dict[str, str]:
+        if not self.enabled:
+            return {}
+        record = self.records.get(url)
+        if not record:
+            return {}
+        headers: Dict[str, str] = {}
+        etag = record.get("etag")
+        last_modified = record.get("last_modified")
+        if etag:
+            headers["If-None-Match"] = etag
+        if last_modified:
+            headers["If-Modified-Since"] = last_modified
+        return headers
+
+    def update(self, url: str, *, etag: Optional[str] = None, last_modified: Optional[str] = None,
+               status_code: Optional[int] = None, content_hash: Optional[str] = None) -> None:
+        if not self.enabled:
+            return
+        record = self.records.get(url, {})
+        if etag:
+            record["etag"] = etag
+        if last_modified:
+            record["last_modified"] = last_modified
+        if status_code is not None:
+            record["status_code"] = status_code
+        if content_hash:
+            record["content_hash"] = content_hash
+        record["updated_at"] = datetime.utcnow().isoformat()
+        self.records[url] = record
+        self._dirty = True
+
+    def save(self) -> None:
+        if not self.enabled or not self._dirty:
+            return
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cache_path.write_text(json.dumps(self.records, indent=2))
+
+
 def _default_download_headers() -> Dict[str, str]:
     user_agent = os.getenv("INGESTION_DOWNLOAD_USER_AGENT", "").strip()
     if not user_agent:
@@ -303,6 +355,7 @@ def _download_document(
     client: httpx.Client,
     max_size_bytes: int,
     throttle: Optional[DomainThrottle] = None,
+    cache: Optional[HttpCache] = None,
 ) -> Tuple[Optional[bytes], Dict[str, Any]]:
     meta: Dict[str, Any] = {"url": url, "error": None}
     max_retries_env = os.getenv("INGESTION_DOWNLOAD_RETRIES", "").strip()
@@ -336,37 +389,41 @@ def _download_document(
             meta["blocked_domain"] = domain
             return None, meta
 
-    try:
-        head = client.head(url, follow_redirects=True)
-        meta["head_status"] = head.status_code
-        if head.headers.get("cf-mitigated"):
-            if throttle and domain:
-                throttle.record_failure(domain, head.status_code, None, cf_mitigated=True)
-            meta["error"] = "cloudflare_challenge"
-            return None, meta
-        if head.status_code < 400:
-            meta["content_type"] = head.headers.get("content-type")
-            meta["etag"] = head.headers.get("etag")
-            meta["last_modified"] = head.headers.get("last-modified")
-            meta["final_url"] = str(head.url)
-            meta["content_length"] = int(head.headers.get("content-length") or 0)
-            if meta["content_length"] and meta["content_length"] > max_size_bytes:
-                meta["error"] = "content_length_exceeds_limit"
+    conditional_headers = cache.headers_for(url) if cache else {}
+    if not conditional_headers:
+        try:
+            head = client.head(url, follow_redirects=True)
+            meta["head_status"] = head.status_code
+            if head.headers.get("cf-mitigated"):
+                if throttle and domain:
+                    throttle.record_failure(domain, head.status_code, None, cf_mitigated=True)
+                meta["error"] = "cloudflare_challenge"
                 return None, meta
-        elif _should_retry(head.status_code):
-            retry_after = _parse_retry_after(head.headers.get("retry-after"))
-            if throttle and domain:
-                throttle.record_failure(domain, head.status_code, retry_after)
-                if throttle._is_blocked(domain):
-                    meta["error"] = "domain_blocked"
-                    meta["blocked_domain"] = domain
+            if head.status_code < 400:
+                meta["content_type"] = head.headers.get("content-type")
+                meta["etag"] = head.headers.get("etag")
+                meta["last_modified"] = head.headers.get("last-modified")
+                meta["final_url"] = str(head.url)
+                meta["content_length"] = int(head.headers.get("content-length") or 0)
+                if meta["content_length"] and meta["content_length"] > max_size_bytes:
+                    meta["error"] = "content_length_exceeds_limit"
                     return None, meta
-            _sleep_for_retry(head.headers, 0)
-        else:
-            meta["error"] = f"head_failed_status:{head.status_code}"
-    except Exception as exc:
-        meta["head_failed"] = True
-        meta["head_error"] = str(exc)
+            elif _should_retry(head.status_code):
+                retry_after = _parse_retry_after(head.headers.get("retry-after"))
+                if throttle and domain:
+                    throttle.record_failure(domain, head.status_code, retry_after)
+                    if throttle._is_blocked(domain):
+                        meta["error"] = "domain_blocked"
+                        meta["blocked_domain"] = domain
+                        return None, meta
+                _sleep_for_retry(head.headers, 0)
+            else:
+                meta["error"] = f"head_failed_status:{head.status_code}"
+        except Exception as exc:
+            meta["head_failed"] = True
+            meta["head_error"] = str(exc)
+    else:
+        meta["conditional_headers"] = True
 
     last_exc: Optional[Exception] = None
     for attempt in range(max_retries):
@@ -376,8 +433,19 @@ def _download_document(
                     meta["error"] = "domain_blocked"
                     meta["blocked_domain"] = domain
                     return None, meta
-            response = client.get(url, follow_redirects=True)
+            response = client.get(url, follow_redirects=True, headers=conditional_headers or None)
             meta["status_code"] = response.status_code
+            if response.status_code == 304:
+                if cache:
+                    cache.update(
+                        url,
+                        etag=response.headers.get("etag"),
+                        last_modified=response.headers.get("last-modified"),
+                        status_code=304,
+                    )
+                meta["error"] = "not_modified"
+                meta["skip"] = True
+                return None, meta
             if response.headers.get("cf-mitigated"):
                 if throttle and domain:
                     throttle.record_failure(domain, response.status_code, None, cf_mitigated=True)
@@ -409,6 +477,13 @@ def _download_document(
                 meta["error"] = "download_exceeds_limit"
                 return None, meta
             meta["content_length"] = len(content)
+            if cache:
+                cache.update(
+                    url,
+                    etag=response.headers.get("etag"),
+                    last_modified=response.headers.get("last-modified"),
+                    status_code=response.status_code,
+                )
             if throttle and domain:
                 throttle.record_success(domain)
             return content, meta
@@ -1053,6 +1128,7 @@ def ingest_crawl_from_logs(
     )
     domain_throttle = DomainThrottle() if download_client else None
     domain_resolver = DomainResolver() if download_client else None
+    http_cache = HttpCache(output_root / "http_cache.json") if download_client else None
     supported_text_types = {"pdf", "html", "htm", "txt", "text"}
 
     nemo_handle = open(nemo_output_path, "a") if run_nemo_curator else None
@@ -1121,6 +1197,7 @@ def ingest_crawl_from_logs(
                         download_client,
                         max_file_size_bytes,
                         throttle=domain_throttle,
+                        cache=http_cache,
                     )
                     extraction_meta["content_type"] = download_meta.get("content_type") or extraction_meta["content_type"]
                     extraction_meta["content_length"] = download_meta.get("content_length")
@@ -1130,6 +1207,8 @@ def ingest_crawl_from_logs(
                         extraction_meta["method"] = method
                         extraction_meta["error"] = error
                         extraction_meta["text_length"] = len(raw_content)
+                        if http_cache:
+                            http_cache.update(url, content_hash=content_hash)
                         if output_settings.include_raw_files:
                             raw_file_path = _write_raw_file(raw_root, title or url, file_type, content_bytes)
                         if raw_content:
@@ -1138,7 +1217,10 @@ def ingest_crawl_from_logs(
                             extraction_stats["failed"] += 1
                     else:
                         extraction_meta["error"] = download_meta.get("error")
-                        extraction_stats["failed"] += 1
+                        if download_meta.get("skip"):
+                            extraction_stats["skipped"] += 1
+                        else:
+                            extraction_stats["failed"] += 1
             else:
                 extraction_stats["skipped"] += 1
 
@@ -1363,6 +1445,8 @@ def ingest_crawl_from_logs(
         source_client.close()
     if download_client:
         download_client.close()
+    if http_cache:
+        http_cache.save()
 
     return IngestionResult(
         crawl_id=crawl_id,
