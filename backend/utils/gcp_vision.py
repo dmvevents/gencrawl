@@ -28,10 +28,10 @@ def _preprocess_image(path: str, grayscale: bool, autocontrast: bool, sharpen: b
 def _vision_request(image_bytes: bytes, api_key: Optional[str], access_token: Optional[str], quota_project: Optional[str]) -> dict:
     url = "https://vision.googleapis.com/v1/images:annotate"
     headers = {"Content-Type": "application/json"}
-    if api_key:
-        url = f"{url}?key={api_key}"
-    elif access_token:
+    if access_token:
         headers["Authorization"] = f"Bearer {access_token}"
+    elif api_key:
+        url = f"{url}?key={api_key}"
     else:
         raise RuntimeError("Vision OCR requires GOOGLE_API_KEY or GOOGLE_OAUTH_ACCESS_TOKEN")
     if quota_project:
