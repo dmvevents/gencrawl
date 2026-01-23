@@ -8,6 +8,7 @@ import time
 import hashlib
 import httpx
 import email.utils
+import socket
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -253,6 +254,32 @@ class DomainThrottle:
             return
         delay = retry_after if retry_after is not None else min(self.backoff_base ** failures, self.max_backoff)
         self.next_allowed[domain] = now + max(delay, self.min_interval)
+
+
+class DomainResolver:
+    def __init__(self) -> None:
+        enabled_env = os.getenv("INGESTION_DNS_PREFLIGHT", "true").lower()
+        self.enabled = enabled_env not in {"0", "false", "no"}
+        ttl_env = os.getenv("INGESTION_DNS_CACHE_TTL", "").strip()
+        self.ttl = float(ttl_env) if ttl_env else 600.0
+        self.cache: Dict[str, Tuple[bool, float]] = {}
+
+    def resolve(self, domain: str) -> bool:
+        if not self.enabled:
+            return True
+        if not domain:
+            return False
+        cached = self.cache.get(domain)
+        now = time.time()
+        if cached and now - cached[1] < self.ttl:
+            return cached[0]
+        try:
+            socket.getaddrinfo(domain, None)
+            result = True
+        except Exception:
+            result = False
+        self.cache[domain] = (result, now)
+        return result
 
 
 def _default_download_headers() -> Dict[str, str]:
@@ -1025,6 +1052,7 @@ def ingest_crawl_from_logs(
         else None
     )
     domain_throttle = DomainThrottle() if download_client else None
+    domain_resolver = DomainResolver() if download_client else None
     supported_text_types = {"pdf", "html", "htm", "txt", "text"}
 
     nemo_handle = open(nemo_output_path, "a") if run_nemo_curator else None
@@ -1083,29 +1111,34 @@ def ingest_crawl_from_logs(
             if (extract_text or run_nemo_curator) and download_client and url and file_type in supported_text_types:
                 extraction_meta["attempted"] = True
                 extraction_stats["attempted"] += 1
-                content_bytes, download_meta = _download_document(
-                    url,
-                    download_client,
-                    max_file_size_bytes,
-                    throttle=domain_throttle,
-                )
-                extraction_meta["content_type"] = download_meta.get("content_type") or extraction_meta["content_type"]
-                extraction_meta["content_length"] = download_meta.get("content_length")
-                if content_bytes:
-                    content_hash = hashlib.sha256(content_bytes).hexdigest()
-                    raw_content, method, error = _extract_text_from_bytes(file_type, content_bytes, max_text_chars)
-                    extraction_meta["method"] = method
-                    extraction_meta["error"] = error
-                    extraction_meta["text_length"] = len(raw_content)
-                    if output_settings.include_raw_files:
-                        raw_file_path = _write_raw_file(raw_root, title or url, file_type, content_bytes)
-                    if raw_content:
-                        extraction_stats["succeeded"] += 1
-                    else:
-                        extraction_stats["failed"] += 1
-                else:
-                    extraction_meta["error"] = download_meta.get("error")
+                domain = urlparse(url).netloc
+                if domain_resolver and not domain_resolver.resolve(domain):
+                    extraction_meta["error"] = "dns_unresolved"
                     extraction_stats["failed"] += 1
+                else:
+                    content_bytes, download_meta = _download_document(
+                        url,
+                        download_client,
+                        max_file_size_bytes,
+                        throttle=domain_throttle,
+                    )
+                    extraction_meta["content_type"] = download_meta.get("content_type") or extraction_meta["content_type"]
+                    extraction_meta["content_length"] = download_meta.get("content_length")
+                    if content_bytes:
+                        content_hash = hashlib.sha256(content_bytes).hexdigest()
+                        raw_content, method, error = _extract_text_from_bytes(file_type, content_bytes, max_text_chars)
+                        extraction_meta["method"] = method
+                        extraction_meta["error"] = error
+                        extraction_meta["text_length"] = len(raw_content)
+                        if output_settings.include_raw_files:
+                            raw_file_path = _write_raw_file(raw_root, title or url, file_type, content_bytes)
+                        if raw_content:
+                            extraction_stats["succeeded"] += 1
+                        else:
+                            extraction_stats["failed"] += 1
+                    else:
+                        extraction_meta["error"] = download_meta.get("error")
+                        extraction_stats["failed"] += 1
             else:
                 extraction_stats["skipped"] += 1
 
