@@ -152,7 +152,8 @@ export default function IngestionPage() {
     path: string,
     label: string,
     title?: string,
-    mode: 'json' | 'markdown' = 'json'
+    mode: 'json' | 'markdown' = 'json',
+    fallback?: IngestDocument
   ) => {
     if (!selectedCrawlId) return
     setStructuredOpen(true)
@@ -167,7 +168,13 @@ export default function IngestionPage() {
       setStructuredPath(response.path)
       setStructuredPayload(response.data)
     } catch (err) {
-      setStructuredError(err instanceof Error ? err.message : 'Failed to load structured output')
+      if (fallback) {
+        setStructuredPath(path)
+        setStructuredPayload(fallback)
+        setStructuredError('Structured file not found. Showing stored ingestion record instead.')
+      } else {
+        setStructuredError(err instanceof Error ? err.message : 'Failed to load structured output')
+      }
     } finally {
       setStructuredLoading(false)
     }
@@ -847,7 +854,7 @@ export default function IngestionPage() {
                         <div className="flex flex-col gap-2">
                           <button
                             type="button"
-                            onClick={() => structuredFile && openStructured(structuredFile, 'Structured', doc.title, 'json')}
+                            onClick={() => structuredFile && openStructured(structuredFile, 'Structured', doc.title, 'json', doc)}
                             className="gc-button-secondary text-xs"
                             disabled={!structuredFile}
                           >
@@ -855,7 +862,7 @@ export default function IngestionPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => outlineFile && openStructured(outlineFile, 'Outline', doc.title, 'json')}
+                            onClick={() => outlineFile && openStructured(outlineFile, 'Outline', doc.title, 'json', doc)}
                             className="gc-button-secondary text-xs"
                             disabled={!outlineFile}
                           >
@@ -863,7 +870,7 @@ export default function IngestionPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => structuredFile && openStructured(structuredFile, 'Markdown', doc.title, 'markdown')}
+                            onClick={() => structuredFile && openStructured(structuredFile, 'Markdown', doc.title, 'markdown', doc)}
                             className="gc-button-secondary text-xs"
                             disabled={!structuredFile}
                           >
