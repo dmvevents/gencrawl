@@ -41,6 +41,13 @@ services:
     volumes:
       - weaviate_data:/var/lib/weaviate
 
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "18081:8080"
+    volumes:
+      - ./config/searxng:/etc/searxng:ro
+
   api:
     build:
       context: ./backend
@@ -75,6 +82,8 @@ services:
       INGESTION_VISION_AUTOCONTRAST: ${INGESTION_VISION_AUTOCONTRAST}
       INGESTION_VISION_SHARPEN: ${INGESTION_VISION_SHARPEN}
       INGESTION_COLLAPSE_WHITESPACE: ${INGESTION_COLLAPSE_WHITESPACE}
+      WEB_SEARCH_URL: http://searxng:8080
+      WEB_SEARCH_PROVIDER: searxng
     ports:
       - "8000:8000"
     depends_on:
