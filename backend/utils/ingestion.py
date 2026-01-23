@@ -26,7 +26,13 @@ DOC_TYPE_KEYWORDS = {
     "syllabus": ["syllabus", "specification", "course outline"],
     "curriculum": ["curriculum", "scheme of work", "lesson plan", "learning outcomes"],
     "practice": ["practice", "sample paper", "mock", "worked example"],
-    "report": ["report", "bulletin", "guide", "manual", "handbook"],
+    "report": ["report", "bulletin", "manual", "handbook"],
+    "newsletter": ["newsletter", "news bulletin", "weekly update", "monthly update"],
+    "notice": ["notice", "notification", "announcement", "advisory", "press release", "media release"],
+    "results": ["results", "result list", "scores", "grades", "pass list", "merit list"],
+    "timetable": ["timetable", "schedule", "calendar", "exam timetable"],
+    "registration": ["registration", "register", "application", "entry form", "application form"],
+    "guidance": ["guide", "guidelines", "instructions", "procedures"],
 }
 
 LEVEL_KEYWORDS = {
@@ -426,6 +432,42 @@ def _heuristic_outline(title: str, taxonomy: Dict[str, Any]) -> Dict[str, Any]:
             {"name": "Learning Outcomes", "notes": "Targeted skills and knowledge."},
             {"name": "Activities", "notes": "Suggested learning activities."},
             {"name": "Assessment", "notes": "Evaluation methods and criteria."},
+        ]
+    elif doc_type in {"newsletter"}:
+        sections = [
+            {"name": "Highlights", "notes": "Key updates and announcements."},
+            {"name": "Programs", "notes": "Program-specific news."},
+            {"name": "Dates", "notes": "Upcoming events and deadlines."},
+        ]
+    elif doc_type in {"notice"}:
+        sections = [
+            {"name": "Announcement", "notes": "Primary notice or update."},
+            {"name": "Effective Date", "notes": "When the notice applies."},
+            {"name": "Actions", "notes": "Required actions or next steps."},
+        ]
+    elif doc_type in {"results"}:
+        sections = [
+            {"name": "Summary", "notes": "Overall results overview."},
+            {"name": "Performance", "notes": "Score distribution and highlights."},
+            {"name": "Notes", "notes": "Explanatory notes or next steps."},
+        ]
+    elif doc_type in {"timetable"}:
+        sections = [
+            {"name": "Schedule", "notes": "Exam or event schedule."},
+            {"name": "Dates", "notes": "Important dates and times."},
+            {"name": "Instructions", "notes": "Logistics and guidance."},
+        ]
+    elif doc_type in {"registration"}:
+        sections = [
+            {"name": "Eligibility", "notes": "Who can apply and requirements."},
+            {"name": "Steps", "notes": "Registration steps and deadlines."},
+            {"name": "Contacts", "notes": "Where to get help or submit forms."},
+        ]
+    elif doc_type in {"guidance"}:
+        sections = [
+            {"name": "Overview", "notes": "Purpose and scope."},
+            {"name": "Procedures", "notes": "Step-by-step guidance."},
+            {"name": "Compliance", "notes": "Required policies or standards."},
         ]
     else:
         sections = [
