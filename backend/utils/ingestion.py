@@ -182,14 +182,58 @@ def _infer_file_type(url: Optional[str], content_type: Optional[str]) -> str:
     return "unknown"
 
 
+def _default_download_headers() -> Dict[str, str]:
+    user_agent = os.getenv("INGESTION_DOWNLOAD_USER_AGENT", "").strip()
+    if not user_agent:
+        user_agent = (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        )
+    return {
+        "User-Agent": user_agent,
+        "Accept": os.getenv("INGESTION_DOWNLOAD_ACCEPT", "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8"),
+        "Accept-Language": os.getenv("INGESTION_DOWNLOAD_LANGUAGE", "en-US,en;q=0.9"),
+        "Cache-Control": "no-cache",
+    }
+
+
 def _download_document(
     url: str,
     client: httpx.Client,
     max_size_bytes: int,
 ) -> Tuple[Optional[bytes], Dict[str, Any]]:
     meta: Dict[str, Any] = {"url": url, "error": None}
+    max_retries_env = os.getenv("INGESTION_DOWNLOAD_RETRIES", "").strip()
+    max_retries = int(max_retries_env) if max_retries_env.isdigit() else 3
+    backoff_env = os.getenv("INGESTION_DOWNLOAD_BACKOFF", "").strip()
+    backoff_base = float(backoff_env) if backoff_env else 1.5
+    jitter_env = os.getenv("INGESTION_DOWNLOAD_JITTER", "").strip()
+    jitter = float(jitter_env) if jitter_env else 0.25
+
+    def _should_retry(status_code: Optional[int]) -> bool:
+        return status_code in {429, 403, 500, 502, 503, 504}
+
+    def _sleep_for_retry(headers: Dict[str, Any], attempt: int) -> None:
+        retry_after = headers.get("retry-after")
+        delay = None
+        if retry_after:
+            try:
+                delay = float(retry_after)
+            except ValueError:
+                delay = None
+        if delay is None:
+            delay = backoff_base * (2 ** attempt)
+        if jitter:
+            delay += jitter * (attempt + 1)
+        time.sleep(max(delay, 0.5))
+
     try:
         head = client.head(url, follow_redirects=True)
+        meta["head_status"] = head.status_code
+        if head.headers.get("cf-mitigated"):
+            meta["error"] = "cloudflare_challenge"
+            return None, meta
         if head.status_code < 400:
             meta["content_type"] = head.headers.get("content-type")
             meta["etag"] = head.headers.get("etag")
@@ -199,29 +243,51 @@ def _download_document(
             if meta["content_length"] and meta["content_length"] > max_size_bytes:
                 meta["error"] = "content_length_exceeds_limit"
                 return None, meta
-    except Exception:
-        meta["head_failed"] = True
-
-    try:
-        response = client.get(url, follow_redirects=True)
-        response.raise_for_status()
-        meta["content_type"] = response.headers.get("content-type")
-        meta["etag"] = response.headers.get("etag") or meta.get("etag")
-        meta["last_modified"] = response.headers.get("last-modified") or meta.get("last_modified")
-        meta["final_url"] = str(response.url)
-        content_length = int(response.headers.get("content-length") or 0)
-        if content_length and content_length > max_size_bytes:
-            meta["error"] = "content_length_exceeds_limit"
-            return None, meta
-        content = response.content
-        if len(content) > max_size_bytes:
-            meta["error"] = "download_exceeds_limit"
-            return None, meta
-        meta["content_length"] = len(content)
-        return content, meta
+        elif _should_retry(head.status_code):
+            _sleep_for_retry(head.headers, 0)
+        else:
+            meta["error"] = f"head_failed_status:{head.status_code}"
     except Exception as exc:
-        meta["error"] = f"download_failed:{exc}"
-        return None, meta
+        meta["head_failed"] = True
+        meta["head_error"] = str(exc)
+
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries):
+        try:
+            response = client.get(url, follow_redirects=True)
+            meta["status_code"] = response.status_code
+            if response.headers.get("cf-mitigated"):
+                meta["error"] = "cloudflare_challenge"
+                return None, meta
+            if response.status_code >= 400:
+                if _should_retry(response.status_code):
+                    _sleep_for_retry(response.headers, attempt)
+                    continue
+                meta["error"] = f"download_failed_status:{response.status_code}"
+                return None, meta
+            meta["content_type"] = response.headers.get("content-type")
+            meta["etag"] = response.headers.get("etag") or meta.get("etag")
+            meta["last_modified"] = response.headers.get("last-modified") or meta.get("last_modified")
+            meta["final_url"] = str(response.url)
+            content_length = int(response.headers.get("content-length") or 0)
+            if content_length and content_length > max_size_bytes:
+                meta["error"] = "content_length_exceeds_limit"
+                return None, meta
+            content = response.content
+            if len(content) > max_size_bytes:
+                meta["error"] = "download_exceeds_limit"
+                return None, meta
+            meta["content_length"] = len(content)
+            return content, meta
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                _sleep_for_retry({}, attempt)
+                continue
+            break
+
+    meta["error"] = f"download_failed:{last_exc}" if last_exc else "download_failed"
+    return None, meta
 
 
 def _extract_text_from_bytes(
@@ -847,7 +913,11 @@ def ingest_crawl_from_logs(
     collapse_ws_env = os.getenv("INGESTION_COLLAPSE_WHITESPACE", "true").lower()
     collapse_whitespace = collapse_ws_env not in {"0", "false", "no"}
     max_file_size_bytes = int(limits_settings.max_file_size_mb * 1024 * 1024)
-    download_client = httpx.Client(timeout=20.0) if extract_text or run_nemo_curator else None
+    download_client = (
+        httpx.Client(timeout=20.0, headers=_default_download_headers())
+        if extract_text or run_nemo_curator
+        else None
+    )
     supported_text_types = {"pdf", "html", "htm", "txt", "text"}
 
     nemo_handle = open(nemo_output_path, "a") if run_nemo_curator else None
