@@ -132,9 +132,16 @@ def docai_text_length(response: Dict[str, object]) -> int:
     return len(doc.get("text") or "")
 
 
-def vision_ocr_image(image_bytes: bytes, api_key: Optional[str], access_token: Optional[str]) -> Dict[str, object]:
+def vision_ocr_image(
+    image_bytes: bytes,
+    api_key: Optional[str],
+    access_token: Optional[str],
+    quota_project: Optional[str],
+) -> Dict[str, object]:
     url = "https://vision.googleapis.com/v1/images:annotate"
     headers = {"Content-Type": "application/json"}
+    if quota_project:
+        headers["X-Goog-User-Project"] = quota_project
     if api_key:
         url = f"{url}?key={api_key}"
     elif access_token:
@@ -225,7 +232,7 @@ def main() -> None:
     vision_details = {}
     for page_num, img_path in pages.items():
         try:
-            response = vision_ocr_image(img_path.read_bytes(), vision_api_key, access_token)
+            response = vision_ocr_image(img_path.read_bytes(), vision_api_key, access_token, args.project_id)
             (out_dir / f"vision_page_{page_num:03d}.json").write_text(json.dumps(response, indent=2))
             length = vision_text_length(response)
             vision_total += length
