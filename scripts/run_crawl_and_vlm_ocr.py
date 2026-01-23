@@ -166,8 +166,9 @@ def ocr_openai(
             content=json.dumps(payload),
         )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"].strip()
-    return {"provider": "openai", "raw": content}
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"].strip()
+    return {"provider": "openai", "raw": content, "raw_response": data}
 
 
 def ocr_gemini(
@@ -306,6 +307,23 @@ def ocr_page(
     max_output_tokens: int,
     use_base64: bool,
 ) -> Dict[str, object]:
+    if provider == "all":
+        results: List[Dict[str, object]] = []
+        if openai_key:
+            try:
+                result = ocr_openai(image_path, openai_model, openai_key, max_output_tokens, use_base64)
+                result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
+                results.append(result)
+            except Exception as exc:
+                results.append({"provider": "openai", "error": str(exc)})
+        if gemini_key:
+            try:
+                result = ocr_gemini(image_path, gemini_model, gemini_key, max_output_tokens, use_base64)
+                result["parsed"] = normalize_ocr_payload(parse_json_maybe(result["raw"]))
+                results.append(result)
+            except Exception as exc:
+                results.append({"provider": "gemini", "error": str(exc)})
+        return {"provider": "all", "results": results}
     if provider in ("openai", "hybrid") and openai_key:
         try:
             result = ocr_openai(image_path, openai_model, openai_key, max_output_tokens, use_base64)
@@ -347,12 +365,16 @@ def run_ocr_on_pdf(
     gemini_model: str,
     min_text_chars: int,
     max_pages_total: Optional[int],
+    max_pages_per_doc: Optional[int],
     page_counter: List[int],
     image_scale: float,
     force_ocr: bool,
     max_output_tokens: int,
     preprocess_opts: Dict[str, bool],
     use_base64: bool,
+    test_run_dir: Optional[Path],
+    test_run_id: Optional[str],
+    test_doc_slug: Optional[str],
 ) -> Dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
@@ -360,16 +382,22 @@ def run_ocr_on_pdf(
     for page_index in range(doc.page_count):
         if max_pages_total and page_counter[0] >= max_pages_total:
             break
+        if max_pages_per_doc and page_index >= max_pages_per_doc:
+            break
         page = doc.load_page(page_index)
         text_layer = None if force_ocr else extract_text_layer(page, min_text_chars)
         if text_layer:
-            pages_out.append(
-                {
-                    "page": page_index + 1,
-                    "method": "text-layer",
-                    "result": normalize_ocr_payload({"text": text_layer, "markdown": text_layer}),
-                }
-            )
+            page_payload = {
+                "page": page_index + 1,
+                "method": "text-layer",
+                "result": normalize_ocr_payload({"text": text_layer, "markdown": text_layer}),
+            }
+            pages_out.append(page_payload)
+            if test_run_dir and test_run_id and test_doc_slug:
+                page_root = test_run_dir / test_run_id / test_doc_slug / f"page_{page_index + 1}"
+                page_root.mkdir(parents=True, exist_ok=True)
+                out_path = page_root / "text-layer.json"
+                out_path.write_text(json.dumps({"provider": "text-layer", **page_payload}, indent=2))
             continue
 
         pix = page.get_pixmap(matrix=fitz.Matrix(image_scale, image_scale))
@@ -401,6 +429,18 @@ def run_ocr_on_pdf(
                 "usage": ocr_result.get("usage"),
             }
         )
+        if test_run_dir and test_run_id and test_doc_slug:
+            page_root = test_run_dir / test_run_id / test_doc_slug / f"page_{page_index + 1}"
+            page_root.mkdir(parents=True, exist_ok=True)
+            if ocr_result.get("provider") == "all":
+                for idx, result in enumerate(ocr_result.get("results", [])):
+                    provider_name = result.get("provider") or f"provider_{idx}"
+                    out_path = page_root / f"{provider_name}.json"
+                    out_path.write_text(json.dumps(result, indent=2, default=str))
+            else:
+                provider_name = ocr_result.get("provider") or "unknown"
+                out_path = page_root / f"{provider_name}.json"
+                out_path.write_text(json.dumps(ocr_result, indent=2, default=str))
         page_counter[0] += 1
     return {"pages": pages_out, "page_count": doc.page_count}
 
@@ -414,10 +454,11 @@ def main() -> None:
     parser.add_argument("--file-types", nargs="*", default=["pdf"])
     parser.add_argument("--max-docs", type=int, default=1000)
     parser.add_argument("--max-ocr-pages", type=int, default=150)
+    parser.add_argument("--max-pages-per-doc", type=int, default=0, help="Limit OCR pages per document (0 = no limit)")
     parser.add_argument("--batch-pages", type=int, default=25, help="Max OCR pages per run to avoid timeouts")
     parser.add_argument("--max-runtime-seconds", type=int, default=0, help="Stop after this many seconds (0 = no limit)")
     parser.add_argument("--min-text-chars", type=int, default=120)
-    parser.add_argument("--ocr-provider", choices=["openai", "gemini", "hybrid"], default="hybrid")
+    parser.add_argument("--ocr-provider", choices=["openai", "gemini", "hybrid", "all"], default="hybrid")
     parser.add_argument("--openai-model", default=os.getenv("OPENAI_OCR_MODEL", "gpt-4o-mini"))
     parser.add_argument("--gemini-model", default=os.getenv("GEMINI_OCR_MODEL", "gemini-2.0-flash"))
     parser.add_argument("--ocr-dir", default=None, help="Override OCR output directory")
@@ -428,6 +469,10 @@ def main() -> None:
     parser.add_argument("--autocontrast", action="store_true", help="Autocontrast pages before OCR")
     parser.add_argument("--sharpen", action="store_true", help="Sharpen pages before OCR")
     parser.add_argument("--use-base64", action="store_true", help="Request base64 text fields in OCR output")
+    parser.add_argument("--test-run", action="store_true", help="Write full OCR outputs into a test run folder")
+    parser.add_argument("--test-run-id", default=None, help="Optional identifier for OCR test runs")
+    parser.add_argument("--test-run-dir", default="data/ocr_tests", help="Base folder for OCR test outputs")
+    parser.add_argument("--local-pdf-list", default=None, help="Path to a newline-delimited list of local PDF files")
     args = parser.parse_args()
 
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -436,7 +481,10 @@ def main() -> None:
     gemini_output_price = float(os.getenv("GEMINI_OUTPUT_PRICE_PER_MILLION", "0.40"))
 
     crawl_id = args.crawl_id
-    if crawl_id:
+    if args.local_pdf_list:
+        crawl_id = "local"
+        print("[crawl] using local PDF list")
+    elif crawl_id:
         print(f"[crawl] using existing crawl_id={crawl_id}")
     elif args.url:
         crawl_id = "manual"
@@ -448,7 +496,17 @@ def main() -> None:
         print(f"[crawl] crawl_id={crawl_id}")
         wait_for_completion(crawl_id)
 
-    if args.url:
+    if args.local_pdf_list:
+        documents = []
+        list_path = Path(args.local_pdf_list)
+        if list_path.exists():
+            for line in list_path.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                documents.append({"url": line})
+        print(f"[crawl] local list documents={len(documents)}")
+    elif args.url:
         documents = [{"url": args.url}]
         print("[crawl] single URL provided, skipping document fetch")
     else:
@@ -462,19 +520,29 @@ def main() -> None:
     ocr_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded: List[Tuple[str, Path]] = []
-    for idx, doc in enumerate(documents, start=1):
-        url = doc.get("url") or ""
-        if not url.lower().startswith("http"):
-            continue
-        if args.file_types and not any(url.lower().endswith(ft) for ft in args.file_types):
-            continue
-        path = download_document(url, raw_dir, idx)
-        if path:
-            downloaded.append((url, path))
+    if args.local_pdf_list:
+        for doc in documents:
+            url = doc.get("url") or ""
+            path = Path(url)
+            if path.exists() and path.suffix.lower() == ".pdf":
+                downloaded.append((url, path))
+        print(f"[download] local files={len(downloaded)}")
+    else:
+        for idx, doc in enumerate(documents, start=1):
+            url = doc.get("url") or ""
+            if not url.lower().startswith("http"):
+                continue
+            if args.file_types and not any(url.lower().endswith(ft) for ft in args.file_types):
+                continue
+            path = download_document(url, raw_dir, idx)
+            if path:
+                downloaded.append((url, path))
 
-    print(f"[download] saved={len(downloaded)}")
+        print(f"[download] saved={len(downloaded)}")
 
     summary_path = ocr_dir / "summary.json"
+    test_run_dir = Path(args.test_run_dir) if args.test_run else None
+    test_run_id = args.test_run_id or time.strftime("%Y%m%d_%H%M%S")
     page_counter = [0]
     gemini_usage_total = {"prompt_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     def hydrate_from_existing_outputs() -> None:
@@ -525,6 +593,7 @@ def main() -> None:
             "gemini_usage": gemini_usage_total,
             "gemini_cost_usd": round(gemini_cost, 6),
             "batch_limit_pages": args.batch_pages,
+            "max_pages_per_doc": args.max_pages_per_doc,
             "max_runtime_seconds": args.max_runtime_seconds,
         }
         summary_path.write_text(json.dumps(summary, indent=2))
@@ -541,6 +610,7 @@ def main() -> None:
         if out_file.exists():
             print(f"[ocr] skip {pdf_path.name} (already processed)")
             continue
+        doc_slug = pdf_path.stem
         result = run_ocr_on_pdf(
             pdf_path=pdf_path,
             out_dir=ocr_dir,
@@ -551,6 +621,7 @@ def main() -> None:
             gemini_model=args.gemini_model,
             min_text_chars=args.min_text_chars,
             max_pages_total=args.max_ocr_pages,
+            max_pages_per_doc=args.max_pages_per_doc or None,
             page_counter=page_counter,
             image_scale=args.image_scale,
             force_ocr=args.force_ocr,
@@ -561,6 +632,9 @@ def main() -> None:
                 "sharpen": args.sharpen,
             },
             use_base64=args.use_base64,
+            test_run_dir=test_run_dir,
+            test_run_id=test_run_id if args.test_run else None,
+            test_doc_slug=doc_slug if args.test_run else None,
         )
         out_file.write_text(json.dumps({"url": url, "file": str(pdf_path), **result}, indent=2))
         print(f"[ocr] {pdf_path.name} -> {out_file.name} (pages processed: {page_counter[0]})")
