@@ -585,6 +585,15 @@ def _extract_json(content: str) -> str:
     return content.strip()
 
 
+def _normalize_content(text: str) -> str:
+    if not text:
+        return text
+    # Collapse long blank runs and trim trailing whitespace for display.
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _ensure_unique_path(base_path: Path) -> Path:
     if not base_path.exists():
         return base_path
@@ -835,6 +844,8 @@ def ingest_crawl_from_logs(
     source_client = httpx.Client(timeout=10.0) if source_limit != 0 else None
     max_text_chars_env = os.getenv("INGESTION_MAX_TEXT_CHARS", "").strip()
     max_text_chars = int(max_text_chars_env) if max_text_chars_env.isdigit() else 1000000
+    collapse_ws_env = os.getenv("INGESTION_COLLAPSE_WHITESPACE", "true").lower()
+    collapse_whitespace = collapse_ws_env not in {"0", "false", "no"}
     max_file_size_bytes = int(limits_settings.max_file_size_mb * 1024 * 1024)
     download_client = httpx.Client(timeout=20.0) if extract_text or run_nemo_curator else None
     supported_text_types = {"pdf", "html", "htm", "txt", "text"}
@@ -954,7 +965,7 @@ def ingest_crawl_from_logs(
             }
             if raw_content:
                 record["content"] = raw_content
-                record["content_markdown"] = raw_content
+                record["content_markdown"] = _normalize_content(raw_content) if collapse_whitespace else raw_content
             if extraction_meta.get("content_type") and not record.get("content_type"):
                 record["content_type"] = extraction_meta["content_type"]
             if raw_file_path:
@@ -1043,7 +1054,7 @@ def ingest_crawl_from_logs(
                 with open(text_path, "w") as text_handle:
                     text_handle.write(raw_content)
                 with open(markdown_path, "w") as markdown_handle:
-                    markdown_handle.write(raw_content)
+                    markdown_handle.write(record.get("content_markdown") or raw_content)
 
             if nemo_handle is not None:
                 nemo_record = _build_nemo_record(crawl_id, record, raw_content, extraction_meta)
