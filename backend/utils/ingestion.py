@@ -7,6 +7,7 @@ import shutil
 import time
 import hashlib
 import httpx
+import email.utils
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -182,6 +183,78 @@ def _infer_file_type(url: Optional[str], content_type: Optional[str]) -> str:
     return "unknown"
 
 
+def _parse_retry_after(value: Optional[str]) -> Optional[float]:
+    if not value:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    if stripped.isdigit():
+        return float(stripped)
+    try:
+        parsed = email.utils.parsedate_to_datetime(stripped)
+        if parsed:
+            return max(parsed.timestamp() - time.time(), 0.0)
+    except Exception:
+        return None
+    return None
+
+
+class DomainThrottle:
+    def __init__(self) -> None:
+        self.next_allowed: Dict[str, float] = {}
+        self.fail_counts: Dict[str, int] = {}
+        self.blocked_until: Dict[str, float] = {}
+        min_interval_env = os.getenv("INGESTION_DOMAIN_MIN_INTERVAL", "").strip()
+        self.min_interval = float(min_interval_env) if min_interval_env else 1.0
+        backoff_env = os.getenv("INGESTION_DOMAIN_BACKOFF", "").strip()
+        self.backoff_base = float(backoff_env) if backoff_env else 2.0
+        max_backoff_env = os.getenv("INGESTION_DOMAIN_MAX_BACKOFF", "").strip()
+        self.max_backoff = float(max_backoff_env) if max_backoff_env else 60.0
+        fail_env = os.getenv("INGESTION_DOMAIN_MAX_FAILURES", "").strip()
+        self.max_failures = int(fail_env) if fail_env.isdigit() else 3
+        block_env = os.getenv("INGESTION_DOMAIN_BLOCK_COOLDOWN", "").strip()
+        self.block_cooldown = float(block_env) if block_env else 600.0
+        wait_env = os.getenv("INGESTION_DOWNLOAD_MAX_WAIT", "").strip()
+        self.max_wait = float(wait_env) if wait_env else 20.0
+
+    def _is_blocked(self, domain: str) -> bool:
+        until = self.blocked_until.get(domain)
+        return bool(until and until > time.time())
+
+    def before_request(self, domain: str) -> bool:
+        if self._is_blocked(domain):
+            return False
+        now = time.time()
+        next_allowed = self.next_allowed.get(domain, 0.0)
+        if next_allowed > now:
+            wait_for = next_allowed - now
+            if wait_for > self.max_wait:
+                return False
+            time.sleep(wait_for)
+        return True
+
+    def record_success(self, domain: str) -> None:
+        self.fail_counts[domain] = 0
+        self.next_allowed[domain] = time.time() + self.min_interval
+
+    def record_failure(
+        self,
+        domain: str,
+        status_code: Optional[int] = None,
+        retry_after: Optional[float] = None,
+        cf_mitigated: bool = False,
+    ) -> None:
+        failures = self.fail_counts.get(domain, 0) + 1
+        self.fail_counts[domain] = failures
+        now = time.time()
+        if cf_mitigated or failures >= self.max_failures:
+            self.blocked_until[domain] = now + self.block_cooldown
+            return
+        delay = retry_after if retry_after is not None else min(self.backoff_base ** failures, self.max_backoff)
+        self.next_allowed[domain] = now + max(delay, self.min_interval)
+
+
 def _default_download_headers() -> Dict[str, str]:
     user_agent = os.getenv("INGESTION_DOWNLOAD_USER_AGENT", "").strip()
     if not user_agent:
@@ -202,6 +275,7 @@ def _download_document(
     url: str,
     client: httpx.Client,
     max_size_bytes: int,
+    throttle: Optional[DomainThrottle] = None,
 ) -> Tuple[Optional[bytes], Dict[str, Any]]:
     meta: Dict[str, Any] = {"url": url, "error": None}
     max_retries_env = os.getenv("INGESTION_DOWNLOAD_RETRIES", "").strip()
@@ -228,10 +302,19 @@ def _download_document(
             delay += jitter * (attempt + 1)
         time.sleep(max(delay, 0.5))
 
+    domain = urlparse(url).netloc if url else ""
+    if throttle and domain:
+        if not throttle.before_request(domain):
+            meta["error"] = "domain_blocked"
+            meta["blocked_domain"] = domain
+            return None, meta
+
     try:
         head = client.head(url, follow_redirects=True)
         meta["head_status"] = head.status_code
         if head.headers.get("cf-mitigated"):
+            if throttle and domain:
+                throttle.record_failure(domain, head.status_code, None, cf_mitigated=True)
             meta["error"] = "cloudflare_challenge"
             return None, meta
         if head.status_code < 400:
@@ -244,6 +327,13 @@ def _download_document(
                 meta["error"] = "content_length_exceeds_limit"
                 return None, meta
         elif _should_retry(head.status_code):
+            retry_after = _parse_retry_after(head.headers.get("retry-after"))
+            if throttle and domain:
+                throttle.record_failure(domain, head.status_code, retry_after)
+                if throttle._is_blocked(domain):
+                    meta["error"] = "domain_blocked"
+                    meta["blocked_domain"] = domain
+                    return None, meta
             _sleep_for_retry(head.headers, 0)
         else:
             meta["error"] = f"head_failed_status:{head.status_code}"
@@ -254,13 +344,27 @@ def _download_document(
     last_exc: Optional[Exception] = None
     for attempt in range(max_retries):
         try:
+            if throttle and domain:
+                if not throttle.before_request(domain):
+                    meta["error"] = "domain_blocked"
+                    meta["blocked_domain"] = domain
+                    return None, meta
             response = client.get(url, follow_redirects=True)
             meta["status_code"] = response.status_code
             if response.headers.get("cf-mitigated"):
+                if throttle and domain:
+                    throttle.record_failure(domain, response.status_code, None, cf_mitigated=True)
                 meta["error"] = "cloudflare_challenge"
                 return None, meta
             if response.status_code >= 400:
                 if _should_retry(response.status_code):
+                    retry_after = _parse_retry_after(response.headers.get("retry-after"))
+                    if throttle and domain:
+                        throttle.record_failure(domain, response.status_code, retry_after)
+                        if throttle._is_blocked(domain):
+                            meta["error"] = "domain_blocked"
+                            meta["blocked_domain"] = domain
+                            return None, meta
                     _sleep_for_retry(response.headers, attempt)
                     continue
                 meta["error"] = f"download_failed_status:{response.status_code}"
@@ -278,6 +382,8 @@ def _download_document(
                 meta["error"] = "download_exceeds_limit"
                 return None, meta
             meta["content_length"] = len(content)
+            if throttle and domain:
+                throttle.record_success(domain)
             return content, meta
         except Exception as exc:
             last_exc = exc
@@ -918,6 +1024,7 @@ def ingest_crawl_from_logs(
         if extract_text or run_nemo_curator
         else None
     )
+    domain_throttle = DomainThrottle() if download_client else None
     supported_text_types = {"pdf", "html", "htm", "txt", "text"}
 
     nemo_handle = open(nemo_output_path, "a") if run_nemo_curator else None
@@ -976,7 +1083,12 @@ def ingest_crawl_from_logs(
             if (extract_text or run_nemo_curator) and download_client and url and file_type in supported_text_types:
                 extraction_meta["attempted"] = True
                 extraction_stats["attempted"] += 1
-                content_bytes, download_meta = _download_document(url, download_client, max_file_size_bytes)
+                content_bytes, download_meta = _download_document(
+                    url,
+                    download_client,
+                    max_file_size_bytes,
+                    throttle=domain_throttle,
+                )
                 extraction_meta["content_type"] = download_meta.get("content_type") or extraction_meta["content_type"]
                 extraction_meta["content_length"] = download_meta.get("content_length")
                 if content_bytes:
