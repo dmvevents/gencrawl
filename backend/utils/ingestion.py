@@ -15,6 +15,7 @@ from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 from utils.paths import get_log_dir, get_repo_root
 from utils.settings_manager import get_settings_manager
+from utils.gcp_vision import vision_ocr_pdf_bytes
 
 
 YEAR_PATTERN = re.compile(r"(19|20)\d{2}")
@@ -225,12 +226,23 @@ def _extract_text_from_bytes(
     if not content:
         return "", "none", "empty_content"
     if file_type == "pdf":
+        ocr_provider = os.getenv("INGESTION_OCR_PROVIDER", "none").lower()
+        min_chars_env = os.getenv("INGESTION_OCR_MIN_TEXT_CHARS", "").strip()
+        min_chars = int(min_chars_env) if min_chars_env.isdigit() else 400
         try:
             import fitz  # PyMuPDF
             doc = fitz.open(stream=content, filetype="pdf")
             text = "\n".join(page.get_text() for page in doc)
+            if ocr_provider in {"vision", "auto"} and len(text.strip()) < min_chars:
+                ocr_text, method, error = vision_ocr_pdf_bytes(content)
+                if ocr_text:
+                    return ocr_text[:max_chars], method, error
             return text[:max_chars], "pymupdf", None
         except Exception as exc:
+            if ocr_provider in {"vision", "auto"}:
+                ocr_text, method, error = vision_ocr_pdf_bytes(content)
+                if ocr_text:
+                    return ocr_text[:max_chars], method, error
             return "", "pymupdf", f"pdf_extract_failed:{exc}"
     if file_type in {"html", "htm"}:
         try:
