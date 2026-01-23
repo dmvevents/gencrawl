@@ -23,7 +23,14 @@ import {
   BarChart3,
   ScrollText
 } from 'lucide-react'
-import { crawlsApi, ingestApi, CrawlFullData, ApiError, IngestStatusResponse } from '@/lib/api/client'
+import {
+  crawlsApi,
+  ingestApi,
+  CrawlFullData,
+  ApiError,
+  IngestStatusResponse,
+  IngestAsyncStatusResponse,
+} from '@/lib/api/client'
 
 interface JobDetailModalProps {
   crawlId: string
@@ -96,6 +103,21 @@ function formatTime(dateString: string | undefined | null): string {
   }
 }
 
+function formatTimestamp(value?: number): string {
+  if (!value) return '-'
+  try {
+    return new Date(value * 1000).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return String(value)
+  }
+}
+
 export function JobDetailModal({ crawlId, onClose, onRerun, onDelete }: JobDetailModalProps) {
   const [data, setData] = useState<CrawlFullData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -106,6 +128,7 @@ export function JobDetailModal({ crawlId, onClose, onRerun, onDelete }: JobDetai
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [ingestStatus, setIngestStatus] = useState<IngestStatusResponse | null>(null)
+  const [asyncIngestStatus, setAsyncIngestStatus] = useState<IngestAsyncStatusResponse | null>(null)
   const [ingesting, setIngesting] = useState(false)
   const [ingestError, setIngestError] = useState<string | null>(null)
 
@@ -146,9 +169,39 @@ export function JobDetailModal({ crawlId, onClose, onRerun, onDelete }: JobDetai
     }
   }, [crawlId])
 
+  const fetchAsyncIngestStatus = useCallback(async () => {
+    try {
+      const status = await ingestApi.statusAsync(crawlId)
+      setAsyncIngestStatus(status)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setAsyncIngestStatus(null)
+        return
+      }
+      setIngestError('Failed to load async ingestion status')
+    }
+  }, [crawlId])
+
   useEffect(() => {
     fetchIngestStatus()
-  }, [fetchIngestStatus])
+    fetchAsyncIngestStatus()
+  }, [fetchIngestStatus, fetchAsyncIngestStatus])
+
+  useEffect(() => {
+    if (!ingesting && !(asyncIngestStatus && ['queued', 'running'].includes(asyncIngestStatus.status))) {
+      return
+    }
+    const interval = setInterval(fetchAsyncIngestStatus, 4000)
+    return () => clearInterval(interval)
+  }, [ingesting, asyncIngestStatus, fetchAsyncIngestStatus])
+
+  useEffect(() => {
+    if (!asyncIngestStatus) return
+    if (asyncIngestStatus.status === 'completed' || asyncIngestStatus.status === 'failed') {
+      setIngesting(false)
+      fetchIngestStatus()
+    }
+  }, [asyncIngestStatus, fetchIngestStatus])
 
   // Auto-refresh for active jobs
   useEffect(() => {
@@ -221,16 +274,16 @@ export function JobDetailModal({ crawlId, onClose, onRerun, onDelete }: JobDetai
   const handleIngest = async () => {
     setIngesting(true)
     try {
-      await ingestApi.run(crawlId, false)
-      await fetchIngestStatus()
+      await ingestApi.runAsync(crawlId, false)
+      await fetchAsyncIngestStatus()
     } catch (err) {
       if (err instanceof ApiError) {
         setIngestError(err.message)
       } else {
         setIngestError('Failed to ingest crawl results')
       }
-    } finally {
       setIngesting(false)
+    } finally {
     }
   }
 
@@ -482,6 +535,18 @@ export function JobDetailModal({ crawlId, onClose, onRerun, onDelete }: JobDetai
                     {ingestError && (
                       <div className="mb-3 text-sm text-rose-600">
                         {ingestError}
+                      </div>
+                    )}
+
+                    {asyncIngestStatus && (
+                      <div className="mb-3 text-xs text-[var(--gc-muted)]">
+                        Async status: {asyncIngestStatus.status} · started {formatTimestamp(asyncIngestStatus.started_at)}
+                        {asyncIngestStatus.completed_at && (
+                          <> · completed {formatTimestamp(asyncIngestStatus.completed_at)}</>
+                        )}
+                        {asyncIngestStatus.error && (
+                          <div className="mt-1 text-rose-600">{asyncIngestStatus.error}</div>
+                        )}
                       </div>
                     )}
 

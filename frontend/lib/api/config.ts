@@ -73,7 +73,9 @@ export const API_ENDPOINTS = {
 
   // Ingestion
   ingest: `${API_VERSION}/ingest`,
+  ingestAsync: `${API_VERSION}/ingest/async`,
   ingestStatus: (id: string) => `${API_VERSION}/ingest/${id}/status`,
+  ingestStatusAsync: (id: string) => `${API_VERSION}/ingest/${id}/status-async`,
   ingestDocuments: (id: string) => `${API_VERSION}/ingest/${id}/documents`,
   ingestDownload: (id: string) => `${API_VERSION}/ingest/${id}/download`,
   ingestCurate: (id: string) => `${API_VERSION}/ingest/${id}/curate`,

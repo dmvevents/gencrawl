@@ -336,8 +336,20 @@ export const ingestApi = {
       overwrite,
       ...options,
     }),
+  runAsync: (
+    crawlId: string,
+    overwrite: boolean = false,
+    options?: { run_nemo_curator?: boolean; curate?: boolean; extract_text?: boolean }
+  ) =>
+    api.post<IngestAsyncQueuedResponse>(API_ENDPOINTS.ingestAsync, {
+      crawl_id: crawlId,
+      overwrite,
+      ...options,
+    }),
   status: (crawlId: string) =>
     api.get<IngestStatusResponse>(API_ENDPOINTS.ingestStatus(crawlId)),
+  statusAsync: (crawlId: string) =>
+    api.get<IngestAsyncStatusResponse>(API_ENDPOINTS.ingestStatusAsync(crawlId)),
   listDocuments: (crawlId: string, limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';
     return api.get<IngestDocumentsResponse>(`${API_ENDPOINTS.ingestDocuments(crawlId)}${query}`);
@@ -568,6 +580,21 @@ export interface IngestResponse {
   duplicate_count: number;
   output_dir: string;
   manifest_path: string;
+}
+
+export interface IngestAsyncQueuedResponse {
+  crawl_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  status_path?: string;
+}
+
+export interface IngestAsyncStatusResponse {
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  started_at?: number;
+  completed_at?: number;
+  error?: string;
+  request?: Record<string, any>;
+  result?: Record<string, any>;
 }
 
 export interface IngestStatusResponse {

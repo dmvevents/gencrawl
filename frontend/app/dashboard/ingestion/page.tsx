@@ -13,7 +13,15 @@ import {
   X,
 } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
-import { crawlsApi, ingestApi, ApiError, CrawlSummary, IngestDocument, IngestStatusResponse } from '@/lib/api/client'
+import {
+  crawlsApi,
+  ingestApi,
+  ApiError,
+  CrawlSummary,
+  IngestDocument,
+  IngestStatusResponse,
+  IngestAsyncStatusResponse,
+} from '@/lib/api/client'
 
 const DEFAULT_LIMIT = 200
 
@@ -46,14 +54,31 @@ function parseDateValue(value?: string | null) {
   return 0
 }
 
+function formatTimestamp(value?: number) {
+  if (!value) return '-'
+  try {
+    return new Date(value * 1000).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return String(value)
+  }
+}
+
 export default function IngestionPage() {
   const [crawls, setCrawls] = useState<CrawlSummary[]>([])
   const [selectedCrawlId, setSelectedCrawlId] = useState('')
   const [selectedCrawl, setSelectedCrawl] = useState<CrawlSummary | null>(null)
   const [status, setStatus] = useState<IngestStatusResponse | null>(null)
+  const [asyncStatus, setAsyncStatus] = useState<IngestAsyncStatusResponse | null>(null)
   const [documents, setDocuments] = useState<IngestDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [statusLoading, setStatusLoading] = useState(false)
+  const [asyncStatusLoading, setAsyncStatusLoading] = useState(false)
   const [docsLoading, setDocsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [docsError, setDocsError] = useState<string | null>(null)
@@ -99,6 +124,22 @@ export default function IngestionPage() {
     }
   }, [selectedCrawlId])
 
+  const loadAsyncStatus = useCallback(async (crawlId: string) => {
+    setAsyncStatusLoading(true)
+    try {
+      const response = await ingestApi.statusAsync(crawlId)
+      setAsyncStatus(response)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setAsyncStatus(null)
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load async ingestion status')
+      }
+    } finally {
+      setAsyncStatusLoading(false)
+    }
+  }, [])
+
   const loadIngestion = useCallback(async (crawlId: string) => {
     if (!crawlId) return
 
@@ -120,6 +161,8 @@ export default function IngestionPage() {
       setStatusLoading(false)
     }
 
+    await loadAsyncStatus(crawlId)
+
     try {
       const docs = await ingestApi.listDocuments(crawlId, limit)
       setDocuments(docs.documents)
@@ -134,7 +177,7 @@ export default function IngestionPage() {
     } finally {
       setDocsLoading(false)
     }
-  }, [limit])
+  }, [limit, loadAsyncStatus])
 
   useEffect(() => {
     loadCrawls()
@@ -147,6 +190,25 @@ export default function IngestionPage() {
       loadIngestion(selectedCrawlId)
     }
   }, [crawls, selectedCrawlId, loadIngestion])
+
+  useEffect(() => {
+    if (!selectedCrawlId) return
+    if (!ingesting && !(asyncStatus && ['queued', 'running'].includes(asyncStatus.status))) {
+      return
+    }
+    const interval = setInterval(() => {
+      loadAsyncStatus(selectedCrawlId)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [selectedCrawlId, ingesting, asyncStatus, loadAsyncStatus])
+
+  useEffect(() => {
+    if (!asyncStatus || !selectedCrawlId) return
+    if (asyncStatus.status === 'completed' || asyncStatus.status === 'failed') {
+      setIngesting(false)
+      loadIngestion(selectedCrawlId)
+    }
+  }, [asyncStatus, selectedCrawlId, loadIngestion])
 
   const openStructured = useCallback(async (
     path: string,
@@ -282,12 +344,17 @@ export default function IngestionPage() {
             extract_text: extractText,
           }
         : undefined
-      await ingestApi.run(selectedCrawlId, overwrite, options)
-      await loadIngestion(selectedCrawlId)
+      const response = await ingestApi.runAsync(selectedCrawlId, overwrite, options)
+      setAsyncStatus({
+        status: response.status || 'queued',
+        started_at: Date.now() / 1000,
+        request: options,
+      })
+      await loadAsyncStatus(selectedCrawlId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to ingest crawl results')
-    } finally {
       setIngesting(false)
+    } finally {
     }
   }
 
@@ -468,6 +535,27 @@ export default function IngestionPage() {
               </div>
             </div>
 
+            {asyncStatusLoading ? (
+              <div className="text-xs text-[var(--gc-muted)]">Checking async status...</div>
+            ) : asyncStatus ? (
+              <div className="gc-panel-muted p-3 text-xs text-[var(--gc-muted)]">
+                <div className="flex flex-wrap gap-3">
+                  <span>Status: {asyncStatus.status}</span>
+                  <span>Started: {formatTimestamp(asyncStatus.started_at)}</span>
+                  {asyncStatus.completed_at && (
+                    <span>Completed: {formatTimestamp(asyncStatus.completed_at)}</span>
+                  )}
+                </div>
+                {asyncStatus.error && (
+                  <div className="mt-2 text-rose-700">{asyncStatus.error}</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--gc-muted)]">
+                No async ingestion run recorded yet.
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-4 text-sm text-[var(--gc-muted)]">
               <label className="inline-flex items-center gap-2">
                 <input
@@ -575,6 +663,24 @@ export default function IngestionPage() {
               Manifest details and taxonomy hints from the last ingestion run.
             </p>
           </div>
+
+          {asyncStatus && (
+            <div className="gc-panel-muted p-4 text-xs text-[var(--gc-muted)]">
+              <div className="text-xs uppercase tracking-wider text-[var(--gc-muted)] mb-2">
+                Async run
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <span>Status: {asyncStatus.status}</span>
+                <span>Started: {formatTimestamp(asyncStatus.started_at)}</span>
+                {asyncStatus.completed_at && (
+                  <span>Completed: {formatTimestamp(asyncStatus.completed_at)}</span>
+                )}
+              </div>
+              {asyncStatus.error && (
+                <div className="mt-2 text-rose-700">{asyncStatus.error}</div>
+              )}
+            </div>
+          )}
 
           {statusLoading ? (
             <div className="gc-panel-muted p-4 text-sm text-[var(--gc-muted)]">Loading status...</div>
