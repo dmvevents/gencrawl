@@ -233,17 +233,25 @@ def _extract_text_from_bytes(
             import fitz  # PyMuPDF
             doc = fitz.open(stream=content, filetype="pdf")
             text = "\n".join(page.get_text() for page in doc)
-            if ocr_provider in {"vision", "auto"} and len(text.strip()) < min_chars:
-                ocr_text, method, error = vision_ocr_pdf_bytes(content)
-                if ocr_text:
-                    return ocr_text[:max_chars], method, error
-            return text[:max_chars], "pymupdf", None
         except Exception as exc:
             if ocr_provider in {"vision", "auto"}:
                 ocr_text, method, error = vision_ocr_pdf_bytes(content)
                 if ocr_text:
                     return ocr_text[:max_chars], method, error
+                return "", method, error or f"pdf_extract_failed:{exc}"
             return "", "pymupdf", f"pdf_extract_failed:{exc}"
+
+        if ocr_provider == "vision":
+            ocr_text, method, error = vision_ocr_pdf_bytes(content)
+            if ocr_text:
+                return ocr_text[:max_chars], method, error
+            return text[:max_chars], "pymupdf", error
+
+        if ocr_provider == "auto" and len(text.strip()) < min_chars:
+            ocr_text, method, error = vision_ocr_pdf_bytes(content)
+            if ocr_text:
+                return ocr_text[:max_chars], method, error
+        return text[:max_chars], "pymupdf", None
     if file_type in {"html", "htm"}:
         try:
             from bs4 import BeautifulSoup
