@@ -203,14 +203,30 @@ def ocr_gemini(
         ],
         "generationConfig": {"temperature": 0, "maxOutputTokens": max_output_tokens},
     }
+    def _extract_text(response: Dict[str, object]) -> str:
+        candidates = response.get("candidates") or []
+        for candidate in candidates:
+            content = candidate.get("content") or {}
+            parts = content.get("parts") or []
+            texts = []
+            for part in parts:
+                if isinstance(part, dict) and part.get("text"):
+                    texts.append(str(part["text"]))
+            if texts:
+                return "\n".join(texts).strip()
+        return ""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     with httpx.Client(timeout=60) as client:
         resp = client.post(url, json=payload)
         resp.raise_for_status()
         data = resp.json()
-        content = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        content = _extract_text(data)
     usage = data.get("usageMetadata", {})
-    return {"provider": "gemini", "raw": content, "usage": usage}
+    result: Dict[str, object] = {"provider": "gemini", "raw": content, "usage": usage}
+    if not content:
+        result["error"] = "No text returned in Gemini response parts"
+        result["raw_response"] = data
+    return result
 
 
 def parse_json_maybe(raw: str) -> object:
@@ -381,6 +397,7 @@ def run_ocr_on_pdf(
                 "page": page_index + 1,
                 "method": ocr_result.get("provider"),
                 "result": ocr_result.get("parsed") or ocr_result,
+                "error": ocr_result.get("error"),
                 "usage": ocr_result.get("usage"),
             }
         )
