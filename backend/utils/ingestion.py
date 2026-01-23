@@ -334,6 +334,13 @@ class HttpCache:
         self.cache_path.write_text(json.dumps(self.records, indent=2))
 
 
+def _http_cache_path(crawl_id: str) -> Path:
+    scope = os.getenv("INGESTION_HTTP_CACHE_SCOPE", "global").lower()
+    if scope == "crawl":
+        return get_repo_root() / "data" / "ingestion" / crawl_id / "http_cache.json"
+    return get_repo_root() / "data" / "cache" / "ingestion_http_cache.json"
+
+
 def _default_download_headers() -> Dict[str, str]:
     user_agent = os.getenv("INGESTION_DOWNLOAD_USER_AGENT", "").strip()
     if not user_agent:
@@ -1128,7 +1135,7 @@ def ingest_crawl_from_logs(
     )
     domain_throttle = DomainThrottle() if download_client else None
     domain_resolver = DomainResolver() if download_client else None
-    http_cache = HttpCache(output_root / "http_cache.json") if download_client else None
+    http_cache = HttpCache(_http_cache_path(crawl_id)) if download_client else None
     supported_text_types = {"pdf", "html", "htm", "txt", "text"}
 
     nemo_handle = open(nemo_output_path, "a") if run_nemo_curator else None

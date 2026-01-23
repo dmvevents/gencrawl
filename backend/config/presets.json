@@ -27,7 +27,10 @@
           "max_duplicate_percentage": 5,
           "min_text_length": 200,
           "require_date": false,
-          "require_metadata": ["title", "author"],
+          "require_metadata": [
+            "title",
+            "author"
+          ],
           "stop_on_quality_drop": true,
           "quality_threshold_percentage": 70,
           "quality_check_interval": 50,
@@ -79,9 +82,134 @@
           "cost_per_page_estimate": 0.001
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#crawl-alerts", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": true,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#crawl-alerts",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
+        }
+      }
+    },
+    {
+      "id": "polite_research",
+      "name": "Polite Research",
+      "description": "Slow, respectful crawl profile for academic/archival sources.",
+      "category": "research",
+      "icon": "Leaf",
+      "is_builtin": true,
+      "settings": {
+        "limits": {
+          "max_pages": 500,
+          "max_documents": 200,
+          "max_duration_minutes": 90,
+          "max_file_size_mb": 25,
+          "max_total_size_gb": 1,
+          "min_file_size_kb": 10,
+          "max_depth": 2,
+          "max_retries": 4,
+          "timeout_seconds": 90,
+          "enable_budget_controls": true,
+          "pause_at_limit": true
+        },
+        "quality": {
+          "min_quality_score": 0.7,
+          "min_relevance_score": 0.6,
+          "max_duplicate_percentage": 10,
+          "min_text_length": 150,
+          "require_date": false,
+          "require_metadata": [
+            "title"
+          ],
+          "stop_on_quality_drop": false,
+          "quality_threshold_percentage": 60,
+          "quality_check_interval": 100,
+          "quality_gate_action": "continue"
+        },
+        "performance": {
+          "concurrent_requests": 3,
+          "delay_seconds": 4.0,
+          "respect_robots_txt": true,
+          "user_agent": "GenCrawl/1.0 (Polite Research)",
+          "enable_caching": true,
+          "enable_compression": true,
+          "follow_redirects": true,
+          "max_redirects": 3,
+          "adaptive_delay": true,
+          "rate_limit_backoff": true
+        },
+        "processing": {
+          "extract_text": true,
+          "extract_tables": true,
+          "extract_images": false,
+          "run_ocr": false,
+          "enable_deduplication": true,
+          "dedupe_threshold": 0.9,
+          "enable_pii_redaction": false,
+          "generate_embeddings": false,
+          "run_nemo_curator": false,
+          "extract_metadata": true,
+          "language_detection": true,
+          "content_classification": false
+        },
+        "output": {
+          "format": "jsonl",
+          "include_raw_files": true,
+          "create_manifest": true,
+          "hierarchical_structure": true,
+          "preserve_filenames": true,
+          "add_timestamps": true,
+          "compress_output": false,
+          "max_filename_length": 200,
+          "include_failed_urls": true
+        },
+        "budget": {
+          "max_api_cost_usd": 5.0,
+          "warn_at_percentage": 70,
+          "pause_at_percentage": 90,
+          "hard_stop_at_100": true,
+          "track_token_usage": true,
+          "cost_per_page_estimate": 0.001
+        },
+        "notifications": {
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": true,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#crawl-alerts",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     },
@@ -112,7 +240,9 @@
           "max_duplicate_percentage": 10,
           "min_text_length": 100,
           "require_date": false,
-          "require_metadata": ["title"],
+          "require_metadata": [
+            "title"
+          ],
           "stop_on_quality_drop": false,
           "quality_threshold_percentage": 50,
           "quality_check_interval": 100,
@@ -164,9 +294,28 @@
           "cost_per_page_estimate": 0.001
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#crawl-alerts", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": true,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#crawl-alerts",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     },
@@ -249,9 +398,28 @@
           "cost_per_page_estimate": 0.001
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": false, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#crawl-alerts", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": false,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#crawl-alerts",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     },
@@ -282,7 +450,9 @@
           "max_duplicate_percentage": 5,
           "min_text_length": 500,
           "require_date": true,
-          "require_metadata": ["title"],
+          "require_metadata": [
+            "title"
+          ],
           "stop_on_quality_drop": true,
           "quality_threshold_percentage": 60,
           "quality_check_interval": 50,
@@ -334,9 +504,28 @@
           "cost_per_page_estimate": 0.002
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#edu-crawls", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": true,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#edu-crawls",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     },
@@ -367,7 +556,10 @@
           "max_duplicate_percentage": 3,
           "min_text_length": 1000,
           "require_date": true,
-          "require_metadata": ["title", "date"],
+          "require_metadata": [
+            "title",
+            "date"
+          ],
           "stop_on_quality_drop": true,
           "quality_threshold_percentage": 75,
           "quality_check_interval": 25,
@@ -419,9 +611,28 @@
           "cost_per_page_estimate": 0.003
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#legal-crawls", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": true,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#legal-crawls",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     },
@@ -452,7 +663,10 @@
           "max_duplicate_percentage": 5,
           "min_text_length": 2000,
           "require_date": true,
-          "require_metadata": ["title", "author"],
+          "require_metadata": [
+            "title",
+            "author"
+          ],
           "stop_on_quality_drop": true,
           "quality_threshold_percentage": 65,
           "quality_check_interval": 100,
@@ -504,9 +718,28 @@
           "cost_per_page_estimate": 0.002
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#research-crawls", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": true,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#research-crawls",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     },
@@ -537,7 +770,10 @@
           "max_duplicate_percentage": 15,
           "min_text_length": 100,
           "require_date": true,
-          "require_metadata": ["title", "date"],
+          "require_metadata": [
+            "title",
+            "date"
+          ],
           "stop_on_quality_drop": false,
           "quality_threshold_percentage": 40,
           "quality_check_interval": 200,
@@ -589,9 +825,28 @@
           "cost_per_page_estimate": 0.0005
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": false, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#news-crawls", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": false,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#news-crawls",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     },
@@ -622,7 +877,9 @@
           "max_duplicate_percentage": 5,
           "min_text_length": 200,
           "require_date": false,
-          "require_metadata": ["title"],
+          "require_metadata": [
+            "title"
+          ],
           "stop_on_quality_drop": true,
           "quality_threshold_percentage": 60,
           "quality_check_interval": 25,
@@ -674,9 +931,28 @@
           "cost_per_page_estimate": 0.002
         },
         "notifications": {
-          "email": { "enabled": false, "recipients": [], "on_complete": true, "on_failure": true, "on_quality_drop": true, "include_summary": true },
-          "slack": { "enabled": false, "webhook_url": "", "channel": "#sea-crawls", "on_complete": true, "on_failure": true },
-          "webhook": { "enabled": false, "url": "", "headers": {}, "on_complete": true, "on_failure": true }
+          "email": {
+            "enabled": false,
+            "recipients": [],
+            "on_complete": true,
+            "on_failure": true,
+            "on_quality_drop": true,
+            "include_summary": true
+          },
+          "slack": {
+            "enabled": false,
+            "webhook_url": "",
+            "channel": "#sea-crawls",
+            "on_complete": true,
+            "on_failure": true
+          },
+          "webhook": {
+            "enabled": false,
+            "url": "",
+            "headers": {},
+            "on_complete": true,
+            "on_failure": true
+          }
         }
       }
     }

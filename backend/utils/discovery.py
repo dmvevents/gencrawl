@@ -4,6 +4,7 @@ import json
 import re
 import time
 import xml.etree.ElementTree as ET
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
@@ -13,6 +14,10 @@ import httpx
 import asyncio
 
 from utils.paths import get_repo_root
+
+
+def _discovery_user_agent() -> str:
+    return os.getenv("DISCOVERY_USER_AGENT", USER_AGENT)
 
 
 USER_AGENT = "GenCrawl/1.0 (+https://gencrawl.local)"
@@ -514,6 +519,7 @@ async def _preflight_validate(
 
 async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
     targets = config.get("targets") or []
+    strategy = (config.get("strategy") or "").lower()
     filters = config.get("filters") or {}
     file_types = filters.get("file_types") or []
     keywords = filters.get("keywords") or []
@@ -534,11 +540,26 @@ async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
     max_sitemaps = int(limits.get("max_sitemaps", 6))
     max_sitemap_urls = int(limits.get("max_sitemap_urls", 500))
     max_documents = int(limits.get("max_documents", 50))
+    per_domain_limit = int(
+        limits.get(
+            "max_documents_per_domain",
+            os.getenv("DISCOVERY_MAX_DOCS_PER_DOMAIN", max_documents),
+        )
+    )
     max_seed_pages = int(limits.get("max_seed_pages", 5))
     max_page_scans = int(limits.get("max_page_scans", 25))
     max_wp_media_pages = int(limits.get("max_wp_media_pages", 2))
     max_wp_media_items = int(limits.get("max_wp_media_items", 200))
     wp_media_mime_types = _wp_media_mime_types(file_types, wp_media_overrides)
+    prefer_sitemaps = bool(config.get("prefer_sitemaps", True))
+    sitemap_only = bool(config.get("sitemap_only", False) or strategy == "sitemap")
+    polite_mode_env = os.getenv("DISCOVERY_POLITE_MODE", "true").lower()
+    polite_mode = config.get("polite_mode")
+    if polite_mode is None:
+        polite_mode = polite_mode_env not in {"0", "false", "no"}
+    if polite_mode:
+        max_page_scans = min(max_page_scans, int(os.getenv("DISCOVERY_POLITE_MAX_PAGE_SCANS", 10)))
+        max_seed_pages = min(max_seed_pages, int(os.getenv("DISCOVERY_POLITE_MAX_SEED_PAGES", 3)))
 
     if not targets:
         return DiscoveryResult(documents=[], checked_urls=0, skipped_urls=0, used_sitemaps=[])
@@ -551,7 +572,7 @@ async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
     checked_urls = 0
     skipped_urls = 0
 
-    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=20) as client:
+    async with httpx.AsyncClient(headers={"User-Agent": _discovery_user_agent()}, timeout=20) as client:
         delays: Dict[str, float] = {}
         for host, profile in domain_profiles.items():
             delay = profile.get("crawl_delay")
@@ -656,40 +677,49 @@ async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
                 page_candidates.add(url)
 
         # Pull PDF links from key target pages and keyword-matched pages (low compute)
-        keyword_tokens = _normalize_keywords(keywords)
-        scored_pages: List[Tuple[int, str]] = []
-        for page_url in page_candidates:
-            value = _keyword_value(page_url)
-            score = sum(1 for token in keyword_tokens if token in value)
-            scored_pages.append((score, page_url))
-        scored_pages.sort(key=lambda item: (-item[0], len(item[1])))
-        ordered_pages = [page for _, page in scored_pages]
-        seed_pages = list(dict.fromkeys(list(targets) + ordered_pages))[:max_page_scans]
-        for seed_url in seed_pages:
-            try:
-                if not _path_allowed(seed_url, domain_profiles.get(urlparse(seed_url).netloc, {})):
-                    continue
-                response = await requestor.get(seed_url)
-                if response.status_code != 200:
-                    continue
-                for link in _extract_links(response.text):
-                    if not link:
+        should_scan_pages = not sitemap_only
+        if prefer_sitemaps and len(file_candidates) >= max_documents:
+            should_scan_pages = False
+
+        if should_scan_pages:
+            keyword_tokens = _normalize_keywords(keywords)
+            scored_pages: List[Tuple[int, str]] = []
+            for page_url in page_candidates:
+                value = _keyword_value(page_url)
+                score = sum(1 for token in keyword_tokens if token in value)
+                scored_pages.append((score, page_url))
+            scored_pages.sort(key=lambda item: (-item[0], len(item[1])))
+            ordered_pages = [page for _, page in scored_pages]
+            seed_pages = list(dict.fromkeys(list(targets) + ordered_pages))[:max_page_scans]
+            for seed_url in seed_pages:
+                try:
+                    if not _path_allowed(seed_url, domain_profiles.get(urlparse(seed_url).netloc, {})):
                         continue
-                    absolute = urljoin(seed_url, link)
-                    if not _path_allowed(absolute, domain_profiles.get(urlparse(absolute).netloc, {})):
+                    response = await requestor.get(seed_url)
+                    if response.status_code != 200:
                         continue
-                    if any(str(absolute).lower().endswith(f".{ft}") for ft in file_types):
-                        file_candidates.add(absolute)
-                        link_sources.setdefault(absolute, seed_url)
-            except httpx.HTTPError:
-                continue
+                    for link in _extract_links(response.text):
+                        if not link:
+                            continue
+                        absolute = urljoin(seed_url, link)
+                        if not _path_allowed(absolute, domain_profiles.get(urlparse(absolute).netloc, {})):
+                            continue
+                        if any(str(absolute).lower().endswith(f".{ft}") for ft in file_types):
+                            file_candidates.add(absolute)
+                            link_sources.setdefault(absolute, seed_url)
+                except httpx.HTTPError:
+                    continue
 
         documents: List[Dict[str, Any]] = []
+        per_domain_counts: Dict[str, int] = {}
         file_candidates_list = list(file_candidates)
         for url in file_candidates_list:
             if len(documents) >= max_documents:
                 break
             host = urlparse(url).netloc
+            if per_domain_limit > 0 and per_domain_counts.get(host, 0) >= per_domain_limit:
+                skipped_urls += 1
+                continue
             robots = robots_by_host.get(host)
             profile = domain_profiles.get(host, {})
             profile_respect = profile.get("respect_robots")
@@ -734,6 +764,7 @@ async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
                     "last_modified": meta.get("last_modified"),
                 }
             )
+            per_domain_counts[host] = per_domain_counts.get(host, 0) + 1
 
 
     _save_url_cache(cache)
