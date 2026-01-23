@@ -1,8 +1,9 @@
 """Ingestion Router - normalize and store crawl results."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+import time
 from pathlib import Path
 import json
 
@@ -87,6 +88,52 @@ def _load_manifest(crawl_id: str) -> Optional[Dict[str, Any]]:
         return json.load(handle)
 
 
+def _ingest_status_path(crawl_id: str) -> Path:
+    return get_repo_root() / "data" / "ingestion" / crawl_id / "ingest_status.json"
+
+
+def _write_ingest_status(crawl_id: str, payload: Dict[str, Any]) -> None:
+    status_path = _ingest_status_path(crawl_id)
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    status_path.write_text(json.dumps(payload, indent=2))
+
+
+def _run_ingest_job(request: IngestRequest) -> None:
+    started = time.time()
+    _write_ingest_status(
+        request.crawl_id,
+        {"status": "running", "started_at": started, "request": request.dict()},
+    )
+    try:
+        result = ingest_crawl_from_logs(
+            crawl_id=request.crawl_id,
+            overwrite=request.overwrite,
+            limit=request.limit,
+            run_nemo_curator=request.run_nemo_curator,
+            curate=request.curate,
+            extract_text=request.extract_text,
+        )
+        _write_ingest_status(
+            request.crawl_id,
+            {
+                "status": "completed",
+                "started_at": started,
+                "completed_at": time.time(),
+                "result": result.to_dict(),
+            },
+        )
+    except Exception as exc:
+        _write_ingest_status(
+            request.crawl_id,
+            {
+                "status": "failed",
+                "started_at": started,
+                "completed_at": time.time(),
+                "error": str(exc),
+            },
+        )
+
+
 def _resolve_ingestion_path(crawl_id: str, requested_path: str) -> Path:
     if not requested_path:
         raise HTTPException(status_code=400, detail="Missing structured file path")
@@ -116,6 +163,27 @@ async def ingest_crawl(request: IngestRequest):
         return IngestResponse(**result.to_dict())
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/ingest/async")
+async def ingest_crawl_async(request: IngestRequest, background_tasks: BackgroundTasks):
+    """Run ingestion in the background and return immediately with status path."""
+    background_tasks.add_task(_run_ingest_job, request)
+    status_path = _ingest_status_path(request.crawl_id)
+    return {
+        "crawl_id": request.crawl_id,
+        "status": "queued",
+        "status_path": str(status_path),
+    }
+
+
+@router.get("/ingest/{crawl_id}/status-async")
+async def get_async_ingest_status(crawl_id: str):
+    """Get async ingestion status if available."""
+    status_path = _ingest_status_path(crawl_id)
+    if not status_path.exists():
+        raise HTTPException(status_code=404, detail="Async ingest status not found")
+    return json.loads(status_path.read_text())
 
 
 @router.get("/ingest/{crawl_id}/status")
