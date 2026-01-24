@@ -11,6 +11,7 @@ import {
   FileText,
   History,
   LayoutGrid,
+  Plug,
   Settings,
   Terminal,
   Sparkles,
@@ -42,6 +43,7 @@ const primaryNav: NavItem[] = [
 
 const opsNav: NavItem[] = [
   { label: 'Templates', href: '/dashboard/templates', icon: FileText },
+  { label: 'Ingestion Gateway', href: '/dashboard/gateway', icon: Plug },
   { label: 'Ingestion', href: '/dashboard/ingestion', icon: Database },
   { label: 'Archive', href: '/dashboard/archive', icon: Archive },
   { label: 'Scheduler', href: '/dashboard/scheduler', icon: Calendar },

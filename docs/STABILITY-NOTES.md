@@ -9,6 +9,7 @@ This release focuses on crawl politeness and ingestion resilience for academic/o
 - **Sitemap-first discovery**: Discovery skips page scans when sitemaps already satisfy the document target and can run in sitemap-only mode.
 - **Per-domain budgets**: Optional cap on documents per host to prevent overloading a single domain.
 - **New preset**: `Polite Research` preset with conservative concurrency and delay.
+- **Ingestion Gateway UI**: New workspace page for integrations, OCR profile selection, and structured output preferences.
 
 ## Key environment controls
 ```
