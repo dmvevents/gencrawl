@@ -29,6 +29,7 @@ class IntegrationListResponse(BaseModel):
 class IntegrationConnectRequest(BaseModel):
     config: Dict[str, Any] = Field(default_factory=dict)
     store_sensitive: bool = False
+    secret_ref: Optional[str] = None
 
 
 class IntegrationStatusResponse(BaseModel):
@@ -171,6 +172,8 @@ async def connect_integration(integration_id: str, request: IntegrationConnectRe
         raise HTTPException(status_code=404, detail="Integration not found")
     integration = integrations[integration_id]
     config = request.config if request.store_sensitive else _sanitize_config(request.config)
+    if request.secret_ref:
+        config["secret_ref"] = request.secret_ref
     integration.status = "connected"
     integration.config = config
     integration.updated_at = datetime.utcnow().isoformat()

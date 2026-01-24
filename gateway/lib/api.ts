@@ -19,11 +19,11 @@ export async function fetchIntegrations(): Promise<IntegrationConfig[]> {
   return data.integrations || []
 }
 
-export async function connectIntegration(id: string) {
+export async function connectIntegration(id: string, config: Record<string, any> = {}, secretRef?: string) {
   const resp = await fetch(`${API_BASE}/api/v1/integrations/${id}/connect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config: {}, store_sensitive: false }),
+    body: JSON.stringify({ config, store_sensitive: false, secret_ref: secretRef }),
   })
   if (!resp.ok) {
     throw new Error(`Failed to connect: ${resp.statusText}`)

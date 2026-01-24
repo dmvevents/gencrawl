@@ -33,6 +33,49 @@ const integrations = [
   { id: 'local_drive', name: 'Local Drive', icon: HardDrive, detail: 'Watch folders for local imports.' },
 ] as const
 
+const integrationFields: Record<string, { key: string; label: string; placeholder?: string }[]> = {
+  outlook: [
+    { key: 'tenant_id', label: 'Tenant ID' },
+    { key: 'mailbox', label: 'Mailbox (user or shared)' },
+  ],
+  gmail: [
+    { key: 'label', label: 'Label (optional)' },
+    { key: 'query', label: 'Gmail search query' },
+  ],
+  google_drive: [
+    { key: 'drive_id', label: 'Drive ID' },
+    { key: 'folder_id', label: 'Folder ID' },
+  ],
+  google_cloud_storage: [
+    { key: 'bucket', label: 'Bucket name' },
+    { key: 'prefix', label: 'Prefix (optional)' },
+  ],
+  sharepoint: [
+    { key: 'site_url', label: 'Site URL' },
+    { key: 'library', label: 'Library name' },
+  ],
+  dropbox: [
+    { key: 'path', label: 'Path' },
+  ],
+  azure_blob: [
+    { key: 'account', label: 'Storage account' },
+    { key: 'container', label: 'Container name' },
+  ],
+  s3: [
+    { key: 'bucket', label: 'Bucket name' },
+    { key: 'prefix', label: 'Prefix (optional)' },
+  ],
+  web_uploads: [
+    { key: 'collection', label: 'Collection name' },
+  ],
+  api_intake: [
+    { key: 'collection', label: 'Collection name' },
+  ],
+  local_drive: [
+    { key: 'path', label: 'Watch path' },
+  ],
+}
+
 const ocrModels = [
   { id: 'gemini', label: 'Gemini 2.5 Pro (Vision OCR)' },
   { id: 'openai', label: 'OpenAI Vision OCR' },
@@ -70,6 +113,10 @@ export default function IngestionGatewayPage() {
   const [integrationState, setIntegrationState] = useState<Record<string, IntegrationConfig>>({})
   const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationError, setIntegrationError] = useState<string | null>(null)
+  const [showConfig, setShowConfig] = useState(false)
+  const [activeIntegration, setActiveIntegration] = useState<string | null>(null)
+  const [configValues, setConfigValues] = useState<Record<string, string>>({})
+  const [secretRef, setSecretRef] = useState('')
   const [recentRuns, setRecentRuns] = useState<IngestRunSummary[]>([])
 
   const statusLabel = useMemo(
@@ -99,15 +146,16 @@ export default function IngestionGatewayPage() {
   }
 
   const handleConnect = async (id: string) => {
-    setIntegrationLoading(true)
-    try {
-      await integrationsApi.connect(id, {})
-      await loadIntegrations()
-    } catch (err) {
-      setIntegrationError(err instanceof Error ? err.message : 'Failed to connect integration')
-    } finally {
-      setIntegrationLoading(false)
-    }
+    setActiveIntegration(id)
+    const existing = integrationState[id]?.config || {}
+    const fields = integrationFields[id] || []
+    const defaults: Record<string, string> = {}
+    fields.forEach((field) => {
+      defaults[field.key] = String(existing[field.key] ?? '')
+    })
+    setConfigValues(defaults)
+    setSecretRef(String(existing.secret_ref ?? ''))
+    setShowConfig(true)
   }
 
   const handleDisconnect = async (id: string) => {
@@ -138,6 +186,20 @@ export default function IngestionGatewayPage() {
     loadIntegrations()
     ingestApi.listRuns(5).then((resp) => setRecentRuns(resp.runs)).catch(() => setRecentRuns([]))
   }, [])
+
+  const saveConfig = async () => {
+    if (!activeIntegration) return
+    setIntegrationLoading(true)
+    try {
+      await integrationsApi.connect(activeIntegration, configValues, false, secretRef || undefined)
+      await loadIntegrations()
+      setShowConfig(false)
+    } catch (err) {
+      setIntegrationError(err instanceof Error ? err.message : 'Failed to save integration config')
+    } finally {
+      setIntegrationLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -200,6 +262,13 @@ export default function IngestionGatewayPage() {
                       onClick={() => (status === 'connected' ? handleDisconnect(integration.id) : handleConnect(integration.id))}
                     >
                       {status === 'connected' ? 'Disconnect' : 'Connect'}
+                    </button>
+                    <button
+                      className="gc-button-secondary text-xs"
+                      disabled={integrationLoading}
+                      onClick={() => handleConnect(integration.id)}
+                    >
+                      {status === 'connected' ? 'Manage' : 'Configure'}
                     </button>
                     <button
                       className="gc-button-secondary text-xs"
@@ -383,6 +452,56 @@ export default function IngestionGatewayPage() {
           </div>
         </div>
       </div>
+
+      {showConfig && activeIntegration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="gc-panel w-full max-w-2xl p-6 shadow-xl space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-[var(--gc-muted)]">Integration settings</p>
+              <h3 className="text-lg font-semibold text-[var(--gc-ink)]">
+                {integrations.find((item) => item.id === activeIntegration)?.name}
+              </h3>
+              <p className="text-xs text-[var(--gc-muted)] mt-1">
+                Provide non-secret settings here. Use a secret reference (e.g., vault://...) for credentials.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {(integrationFields[activeIntegration] || []).map((field) => (
+                <label key={field.key} className="text-xs text-[var(--gc-muted)]">
+                  {field.label}
+                  <input
+                    value={configValues[field.key] || ''}
+                    onChange={(event) =>
+                      setConfigValues((prev) => ({ ...prev, [field.key]: event.target.value }))
+                    }
+                    placeholder={field.placeholder}
+                    className="mt-1 w-full rounded-lg border border-[var(--gc-border)] bg-[var(--gc-surface)] px-3 py-2 text-sm text-[var(--gc-ink)]"
+                  />
+                </label>
+              ))}
+              <label className="text-xs text-[var(--gc-muted)] md:col-span-2">
+                Secret reference
+                <input
+                  value={secretRef}
+                  onChange={(event) => setSecretRef(event.target.value)}
+                  placeholder="vault://path/to/credential"
+                  className="mt-1 w-full rounded-lg border border-[var(--gc-border)] bg-[var(--gc-surface)] px-3 py-2 text-sm text-[var(--gc-ink)]"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button className="gc-button-secondary" onClick={() => setShowConfig(false)}>
+                Close
+              </button>
+              <button className="gc-button" onClick={saveConfig} disabled={integrationLoading}>
+                Save & Connect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -18,8 +18,12 @@ The Ingestion Gateway is a dedicated workspace for document intake, OCR selectio
 ## Data flow
 1) Intake source → 2) OCR + parsing profile → 3) Structured JSONL/Markdown → 4) Curator pipeline.
 
-## Next steps
-- Wire integration cards to backend endpoints.
-- Create credential management in Settings.
-- Add ingestion run queue + status API to populate the gateway table.
+## Integration config
+- Store non-secret settings in the integration config.
+- Provide credential references via `secret_ref` (e.g., vault://...).
+- Secrets are never stored in the repository.
+
+## Remaining work
+- Create credential management in Settings (store refs, not secrets).
+- Add connector jobs for Drive/S3/Email to feed the ingestion queue.
 - Launch the gateway app with `pnpm dev` inside `gateway/`.

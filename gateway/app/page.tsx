@@ -79,6 +79,10 @@ export default function GatewayPage() {
   const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationError, setIntegrationError] = useState<string | null>(null)
   const [recentRuns, setRecentRuns] = useState<IngestRunSummary[]>([])
+  const [showConfig, setShowConfig] = useState(false)
+  const [activeIntegration, setActiveIntegration] = useState<string | null>(null)
+  const [configJson, setConfigJson] = useState('{}')
+  const [secretRef, setSecretRef] = useState('')
 
   const statusLabel = useMemo(
     () => ({
@@ -111,16 +115,32 @@ export default function GatewayPage() {
     fetchIngestRuns(5).then(setRecentRuns).catch(() => setRecentRuns([]))
   }, [])
 
-  const handleConnect = async (id: string) => {
+  const saveConfig = async () => {
+    if (!activeIntegration) return
     setIntegrationLoading(true)
     try {
-      await connectIntegration(id)
+      const parsed = configJson.trim() ? JSON.parse(configJson) : {}
+      await connectIntegration(activeIntegration, parsed, secretRef || undefined)
       await loadIntegrations()
+      setShowConfig(false)
     } catch (err) {
-      setIntegrationError(err instanceof Error ? err.message : 'Failed to connect integration')
+      setIntegrationError(err instanceof Error ? err.message : 'Failed to save integration config')
     } finally {
       setIntegrationLoading(false)
     }
+  }
+
+  const handleConnect = (id: string) => {
+    setActiveIntegration(id)
+    const existing = integrationState[id]?.config || {}
+    const clone = { ...existing }
+    const secret = clone.secret_ref ? String(clone.secret_ref) : ''
+    if ('secret_ref' in clone) {
+      delete clone.secret_ref
+    }
+    setConfigJson(JSON.stringify(clone, null, 2))
+    setSecretRef(secret)
+    setShowConfig(true)
   }
 
   const handleDisconnect = async (id: string) => {
@@ -211,6 +231,13 @@ export default function GatewayPage() {
                       onClick={() => handleTest(integration.id)}
                     >
                       Test
+                    </button>
+                    <button
+                      className="gc-button-secondary text-xs"
+                      disabled={integrationLoading}
+                      onClick={() => handleConnect(integration.id)}
+                    >
+                      {status === 'connected' ? 'Manage' : 'Configure'}
                     </button>
                   </div>
                 </div>
@@ -384,6 +411,52 @@ export default function GatewayPage() {
           </div>
         </div>
       </div>
+
+      {showConfig && activeIntegration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="gc-panel w-full max-w-2xl p-6 shadow-xl space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-[var(--gc-muted)]">Integration settings</p>
+              <h3 className="text-lg font-semibold text-[var(--gc-ink)]">
+                {integrations.find((item) => item.id === activeIntegration)?.name}
+              </h3>
+              <p className="text-xs text-[var(--gc-muted)] mt-1">
+                Provide non-secret settings here. Use a secret reference (e.g., vault://...) for credentials.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs text-[var(--gc-muted)]">
+                Configuration (JSON)
+                <textarea
+                  value={configJson}
+                  onChange={(event) => setConfigJson(event.target.value)}
+                  rows={6}
+                  className="mt-1 w-full rounded-lg border border-[var(--gc-border)] bg-[var(--gc-surface)] px-3 py-2 text-sm text-[var(--gc-ink)]"
+                />
+              </label>
+              <label className="text-xs text-[var(--gc-muted)]">
+                Secret reference
+                <input
+                  value={secretRef}
+                  onChange={(event) => setSecretRef(event.target.value)}
+                  placeholder="vault://path/to/credential"
+                  className="mt-1 w-full rounded-lg border border-[var(--gc-border)] bg-[var(--gc-surface)] px-3 py-2 text-sm text-[var(--gc-ink)]"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button className="gc-button-secondary" onClick={() => setShowConfig(false)}>
+                Close
+              </button>
+              <button className="gc-button" onClick={saveConfig} disabled={integrationLoading}>
+                Save & Connect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

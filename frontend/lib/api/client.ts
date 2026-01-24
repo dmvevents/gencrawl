@@ -723,10 +723,16 @@ export interface IntegrationStatusResponse {
 
 export const integrationsApi = {
   list: () => api.get<IntegrationsResponse>(API_ENDPOINTS.integrations),
-  connect: (id: string, config?: Record<string, any>, storeSensitive: boolean = false) =>
+  connect: (
+    id: string,
+    config?: Record<string, any>,
+    storeSensitive: boolean = false,
+    secretRef?: string
+  ) =>
     api.post<IntegrationStatusResponse>(API_ENDPOINTS.integrationConnect(id), {
       config: config || {},
       store_sensitive: storeSensitive,
+      secret_ref: secretRef,
     }),
   disconnect: (id: string) =>
     api.post<IntegrationStatusResponse>(API_ENDPOINTS.integrationDisconnect(id)),
