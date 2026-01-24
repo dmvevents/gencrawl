@@ -22,11 +22,14 @@ const integrations = [
   { name: 'Outlook 365', icon: Mail, status: 'disconnected', detail: 'Pull attachments and shared inboxes.' },
   { name: 'Gmail', icon: Mail, status: 'disconnected', detail: 'Import labeled mail threads and PDFs.' },
   { name: 'Google Drive', icon: Cloud, status: 'disconnected', detail: 'Sync shared drives and folders.' },
+  { name: 'Google Cloud Storage', icon: Server, status: 'disconnected', detail: 'Ingest buckets with lifecycle rules.' },
   { name: 'SharePoint', icon: HardDrive, status: 'disconnected', detail: 'Secure doc libraries & lists.' },
   { name: 'Dropbox', icon: Cloud, status: 'disconnected', detail: 'Sync folders and shared links.' },
+  { name: 'Azure Blob Storage', icon: Server, status: 'disconnected', detail: 'Container ingest with metadata tags.' },
   { name: 'S3 / Object Storage', icon: Server, status: 'pending', detail: 'Bucket ingest with manifest.' },
   { name: 'Web Uploads', icon: Upload, status: 'connected', detail: 'Drag & drop, bulk zip imports.' },
   { name: 'API Intake', icon: PlugZap, status: 'connected', detail: 'POST documents + metadata.' },
+  { name: 'Local Drive', icon: HardDrive, status: 'disconnected', detail: 'Watch folders for local imports.' },
 ] as const
 
 const ocrModels = [
