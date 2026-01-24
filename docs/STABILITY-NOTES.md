@@ -10,6 +10,8 @@ This release focuses on crawl politeness and ingestion resilience for academic/o
 - **Per-domain budgets**: Optional cap on documents per host to prevent overloading a single domain.
 - **New preset**: `Polite Research` preset with conservative concurrency and delay.
 - **Ingestion Gateway UI**: New workspace page for integrations, OCR profile selection, and structured output preferences.
+- **Integrations API**: Added backend endpoints for integration status management.
+- **Decoupled gateway app**: Standalone UI on port `4100` with backend-backed statuses.
 
 ## Key environment controls
 ```

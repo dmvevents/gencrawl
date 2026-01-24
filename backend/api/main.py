@@ -76,7 +76,7 @@ app.add_middleware(
 )
 
 # Import routers
-from api.routers import health, crawl, search, monitoring, crawls, iterations, settings, templates, schedules, documents, errors, logs, sessions, ingest, archive, web_search
+from api.routers import health, crawl, search, monitoring, crawls, iterations, settings, templates, schedules, documents, errors, logs, sessions, ingest, archive, web_search, integrations
 
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(crawl.router, prefix="/api/v1", tags=["crawl"])
@@ -94,6 +94,7 @@ app.include_router(sessions.router, prefix="/api/v1", tags=["sessions"])
 app.include_router(ingest.router, prefix="/api/v1", tags=["ingest"])
 app.include_router(archive.router, prefix="/api/v1", tags=["archive"])
 app.include_router(web_search.router, prefix="/api/v1", tags=["web-search"])
+app.include_router(integrations.router, prefix="/api/v1", tags=["integrations"])
 
 
 # WebSocket endpoint for real-time updates

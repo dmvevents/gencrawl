@@ -85,6 +85,12 @@ export const API_ENDPOINTS = {
   // Archive
   archive: `${API_VERSION}/archive`,
   archiveEntry: (hash: string) => `${API_VERSION}/archive/${hash}`,
+
+  // Integrations
+  integrations: `${API_VERSION}/integrations`,
+  integrationConnect: (id: string) => `${API_VERSION}/integrations/${id}/connect`,
+  integrationDisconnect: (id: string) => `${API_VERSION}/integrations/${id}/disconnect`,
+  integrationTest: (id: string) => `${API_VERSION}/integrations/${id}/test`,
 } as const;
 
 /**

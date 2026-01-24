@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Cloud,
   Mail,
@@ -14,8 +14,14 @@ import {
   FileText,
   RefreshCw,
 } from 'lucide-react'
-import PageHeader from '@/components/layout/PageHeader'
-import { integrationsApi, IntegrationConfig } from '@/lib/api/client'
+import PageHeader from '@/components/PageHeader'
+import {
+  fetchIntegrations,
+  connectIntegration,
+  disconnectIntegration,
+  testIntegration,
+  type IntegrationConfig,
+} from '@/lib/api'
 
 type IntegrationStatus = 'connected' | 'pending' | 'disconnected'
 
@@ -58,7 +64,7 @@ const supportedFormats = [
   'TXT/RTF',
 ]
 
-export default function IngestionGatewayPage() {
+export default function GatewayPage() {
   const [selectedModel, setSelectedModel] = useState('gemini')
   const [selectedParser, setSelectedParser] = useState<string[]>(['layout', 'tables'])
   const [structuredOutput, setStructuredOutput] = useState({
@@ -83,9 +89,9 @@ export default function IngestionGatewayPage() {
   const loadIntegrations = async () => {
     setIntegrationLoading(true)
     try {
-      const response = await integrationsApi.list()
+      const list = await fetchIntegrations()
       const map: Record<string, IntegrationConfig> = {}
-      response.integrations.forEach((integration) => {
+      list.forEach((integration) => {
         map[integration.id] = integration
       })
       setIntegrationState(map)
@@ -97,10 +103,14 @@ export default function IngestionGatewayPage() {
     }
   }
 
+  useEffect(() => {
+    loadIntegrations()
+  }, [])
+
   const handleConnect = async (id: string) => {
     setIntegrationLoading(true)
     try {
-      await integrationsApi.connect(id, {})
+      await connectIntegration(id)
       await loadIntegrations()
     } catch (err) {
       setIntegrationError(err instanceof Error ? err.message : 'Failed to connect integration')
@@ -112,7 +122,7 @@ export default function IngestionGatewayPage() {
   const handleDisconnect = async (id: string) => {
     setIntegrationLoading(true)
     try {
-      await integrationsApi.disconnect(id)
+      await disconnectIntegration(id)
       await loadIntegrations()
     } catch (err) {
       setIntegrationError(err instanceof Error ? err.message : 'Failed to disconnect integration')
@@ -124,7 +134,7 @@ export default function IngestionGatewayPage() {
   const handleTest = async (id: string) => {
     setIntegrationLoading(true)
     try {
-      await integrationsApi.test(id)
+      await testIntegration(id)
       await loadIntegrations()
     } catch (err) {
       setIntegrationError(err instanceof Error ? err.message : 'Failed to test integration')
@@ -132,10 +142,6 @@ export default function IngestionGatewayPage() {
       setIntegrationLoading(false)
     }
   }
-
-  useEffect(() => {
-    loadIntegrations()
-  }, [])
 
   return (
     <div className="space-y-8">
@@ -170,10 +176,6 @@ export default function IngestionGatewayPage() {
               {integrationError}
             </div>
           )}
-          <div className="gc-panel-muted p-3 text-xs text-[var(--gc-muted)]">
-            Integration status is backed by the new integrations API. Configure credentials in Settings.
-          </div>
-
           <div className="grid gap-4 md:grid-cols-2">
             {integrations.map((integration) => {
               const Icon = integration.icon
@@ -242,9 +244,6 @@ export default function IngestionGatewayPage() {
                 <p>Output JSONL, markdown, and tables ready for AI pipelines.</p>
               </div>
             </div>
-          </div>
-          <div className="gc-panel-muted p-4 text-xs text-[var(--gc-muted)]">
-            Tip: Use the “Polite Research” preset for official ministries and exam boards.
           </div>
         </div>
       </div>
@@ -373,7 +372,7 @@ export default function IngestionGatewayPage() {
           </div>
           <div className="flex items-center gap-2 text-xs text-[var(--gc-muted)]">
             <LinkIcon className="w-4 h-4" />
-            View full audit trail in the Ingestion page.
+            View full audit trail in the ingestion API.
           </div>
         </div>
       </div>

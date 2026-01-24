@@ -695,6 +695,41 @@ export const archiveApi = {
   get: (hash: string) => api.get<ArchiveEntry>(API_ENDPOINTS.archiveEntry(hash)),
 };
 
+export interface IntegrationConfig {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  status: 'connected' | 'disconnected' | 'pending';
+  config?: Record<string, any>;
+  updated_at?: string | null;
+}
+
+export interface IntegrationsResponse {
+  integrations: IntegrationConfig[];
+  updated_at?: string;
+}
+
+export interface IntegrationStatusResponse {
+  id: string;
+  status: 'connected' | 'disconnected' | 'pending';
+  updated_at?: string | null;
+  message?: string;
+}
+
+export const integrationsApi = {
+  list: () => api.get<IntegrationsResponse>(API_ENDPOINTS.integrations),
+  connect: (id: string, config?: Record<string, any>, storeSensitive: boolean = false) =>
+    api.post<IntegrationStatusResponse>(API_ENDPOINTS.integrationConnect(id), {
+      config: config || {},
+      store_sensitive: storeSensitive,
+    }),
+  disconnect: (id: string) =>
+    api.post<IntegrationStatusResponse>(API_ENDPOINTS.integrationDisconnect(id)),
+  test: (id: string) =>
+    api.post<IntegrationStatusResponse>(API_ENDPOINTS.integrationTest(id)),
+};
+
 export interface IngestDocumentsResponse {
   documents: IngestDocument[];
   total: number;

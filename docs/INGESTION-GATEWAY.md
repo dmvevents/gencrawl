@@ -7,6 +7,7 @@ The Ingestion Gateway is a dedicated workspace for document intake, OCR selectio
 - OCR + parsing profile selection (model and module toggles).
 - Structured output preferences (JSONL, markdown, tables, entities).
 - Supported file formats and recent run summary.
+- Dedicated gateway app on port `4100` (decoupled from the main dashboard).
 
 ## Planned integrations
 - Email connectors: Outlook 365, Gmail (attachment + mailbox filters).
@@ -20,3 +21,4 @@ The Ingestion Gateway is a dedicated workspace for document intake, OCR selectio
 - Wire integration cards to backend endpoints.
 - Create credential management in Settings.
 - Add ingestion run queue + status API to populate the gateway table.
+- Launch the gateway app with `pnpm dev` inside `gateway/`.
