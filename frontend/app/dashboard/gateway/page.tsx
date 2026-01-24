@@ -26,9 +26,9 @@ const integrations = [
   { name: 'SharePoint', icon: HardDrive, status: 'disconnected', detail: 'Secure doc libraries & lists.' },
   { name: 'Dropbox', icon: Cloud, status: 'disconnected', detail: 'Sync folders and shared links.' },
   { name: 'Azure Blob Storage', icon: Server, status: 'disconnected', detail: 'Container ingest with metadata tags.' },
-  { name: 'S3 / Object Storage', icon: Server, status: 'pending', detail: 'Bucket ingest with manifest.' },
-  { name: 'Web Uploads', icon: Upload, status: 'connected', detail: 'Drag & drop, bulk zip imports.' },
-  { name: 'API Intake', icon: PlugZap, status: 'connected', detail: 'POST documents + metadata.' },
+  { name: 'S3 / Object Storage', icon: Server, status: 'disconnected', detail: 'Bucket ingest with manifest.' },
+  { name: 'Web Uploads', icon: Upload, status: 'disconnected', detail: 'Drag & drop, bulk zip imports.' },
+  { name: 'API Intake', icon: PlugZap, status: 'disconnected', detail: 'POST documents + metadata.' },
   { name: 'Local Drive', icon: HardDrive, status: 'disconnected', detail: 'Watch folders for local imports.' },
 ] as const
 
@@ -103,6 +103,9 @@ export default function IngestionGatewayPage() {
             <p className="text-sm text-[var(--gc-muted)]">
               Manage connectors for inboxes, drives, and storage buckets. Each integration feeds into the unified ingestion queue.
             </p>
+          </div>
+          <div className="gc-panel-muted p-3 text-xs text-[var(--gc-muted)]">
+            Integration status is currently a placeholder until connectors are wired to the backend.
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
