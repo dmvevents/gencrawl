@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Database,
   Download,
@@ -107,6 +107,7 @@ export default function IngestionPage() {
   const [structuredError, setStructuredError] = useState<string | null>(null)
   const [structuredLoading, setStructuredLoading] = useState(false)
   const [structuredMode, setStructuredMode] = useState<'json' | 'markdown'>('json')
+  const prevAsyncStatus = useRef<string | null>(null)
 
   const loadCrawls = useCallback(async () => {
     try {
@@ -204,11 +205,17 @@ export default function IngestionPage() {
 
   useEffect(() => {
     if (!asyncStatus || !selectedCrawlId) return
-    if (asyncStatus.status === 'completed' || asyncStatus.status === 'failed') {
-      setIngesting(false)
-      loadIngestion(selectedCrawlId)
+    const currentStatus = asyncStatus.status
+    const previousStatus = prevAsyncStatus.current
+    prevAsyncStatus.current = currentStatus
+
+    if (currentStatus === 'completed' || currentStatus === 'failed') {
+      if (previousStatus === 'queued' || previousStatus === 'running') {
+        setIngesting(false)
+        loadIngestion(selectedCrawlId)
+      }
     }
-  }, [asyncStatus, selectedCrawlId, loadIngestion])
+  }, [asyncStatus, ingesting, selectedCrawlId, loadIngestion])
 
   const openStructured = useCallback(async (
     path: string,
@@ -237,6 +244,33 @@ export default function IngestionPage() {
       } else {
         setStructuredError(err instanceof Error ? err.message : 'Failed to load structured output')
       }
+    } finally {
+      setStructuredLoading(false)
+    }
+  }, [selectedCrawlId])
+
+  const openContent = useCallback(async (
+    path: string,
+    label: string,
+    title?: string,
+  ) => {
+    if (!selectedCrawlId) return
+    setStructuredOpen(true)
+    setStructuredTitle(`${label} output · ${title || 'Untitled document'}`)
+    setStructuredPath(path)
+    setStructuredPayload(null)
+    setStructuredError(null)
+    setStructuredLoading(true)
+    setStructuredMode('markdown')
+    try {
+      const response = await ingestApi.getFile(selectedCrawlId, path)
+      setStructuredPath(response.path)
+      setStructuredPayload({
+        content: response.content,
+        truncated: response.truncated,
+      })
+    } catch (err) {
+      setStructuredError(err instanceof Error ? err.message : 'Failed to load document content')
     } finally {
       setStructuredLoading(false)
     }
@@ -901,6 +935,10 @@ export default function IngestionPage() {
                   ].filter(Boolean)
                   const structuredFile = doc.metadata?.structured_file_path as string | undefined
                   const outlineFile = doc.metadata?.outline_file_path as string | undefined
+                  const markdownFile = doc.metadata?.content_markdown_path as string | undefined
+                  const textFile = doc.metadata?.extracted_text_path as string | undefined
+                  const contentFile = markdownFile || textFile
+                  const contentLabel = markdownFile ? 'Markdown' : textFile ? 'Text' : 'Markdown'
 
                   return (
                     <tr key={`${doc.url}-${index}`} className="align-top">
@@ -976,11 +1014,17 @@ export default function IngestionPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => structuredFile && openStructured(structuredFile, 'Markdown', doc.title, 'markdown', doc)}
+                            onClick={() => {
+                              if (contentFile) {
+                                openContent(contentFile, contentLabel, doc.title)
+                              } else if (structuredFile) {
+                                openStructured(structuredFile, contentLabel, doc.title, 'markdown', doc)
+                              }
+                            }}
                             className="gc-button-secondary text-xs"
-                            disabled={!structuredFile}
+                            disabled={!contentFile && !structuredFile}
                           >
-                            Markdown
+                            {contentLabel}
                           </button>
                         </div>
                       </td>
@@ -1118,9 +1162,16 @@ export default function IngestionPage() {
                 <div className="text-sm text-rose-700">{structuredError}</div>
               ) : structuredPayload ? (
                 structuredMode === 'markdown' ? (
-                  <pre className="whitespace-pre-wrap">
-                    {structuredPayload.content_markdown || structuredPayload.content || 'No markdown content found.'}
-                  </pre>
+                  <>
+                    {structuredPayload.truncated && (
+                      <div className="mb-2 text-xs text-[var(--gc-muted)]">
+                        Preview truncated to the configured limit.
+                      </div>
+                    )}
+                    <pre className="whitespace-pre-wrap">
+                      {structuredPayload.content_markdown || structuredPayload.content || 'No markdown content found.'}
+                    </pre>
+                  </>
                 ) : (
                   <pre className="whitespace-pre-wrap">{JSON.stringify(structuredPayload, null, 2)}</pre>
                 )

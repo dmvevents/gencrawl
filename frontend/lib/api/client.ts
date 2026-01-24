@@ -230,6 +230,14 @@ class ApiClient {
 // Export singleton instance
 export const api = new ApiClient();
 
+const buildQuery = (params: Record<string, any>) => {
+  const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
+  if (entries.length === 0) return '';
+  return `?${entries
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join('&')}`;
+};
+
 // =============================================================================
 // Typed API Methods
 // =============================================================================
@@ -366,6 +374,10 @@ export const ingestApi = {
   getStructured: (crawlId: string, path: string) =>
     api.get<IngestStructuredResponse>(
       `${API_ENDPOINTS.ingestStructured(crawlId)}?path=${encodeURIComponent(path)}`
+    ),
+  getFile: (crawlId: string, path: string) =>
+    api.get<IngestFileResponse>(
+      `${API_ENDPOINTS.ingestFile(crawlId)}?path=${encodeURIComponent(path)}`
     ),
   listRuns: (limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';
@@ -748,6 +760,13 @@ export interface IngestDocumentsResponse {
 export interface IngestStructuredResponse {
   path: string;
   data: any;
+}
+
+export interface IngestFileResponse {
+  path: string;
+  content: string;
+  media_type: string;
+  truncated?: boolean;
 }
 
 export interface IngestRunSummary {

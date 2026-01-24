@@ -7,12 +7,16 @@ import time
 from pathlib import Path
 from datetime import datetime
 import json
+import os
 
 from utils.ingestion import ingest_crawl_from_logs, curate_ingestion_output
 from utils.nv_ingest import run_nv_ingest_from_manifest
 from utils.paths import get_repo_root
 
 router = APIRouter()
+
+FILE_PREVIEW_EXTENSIONS = {".md", ".txt"}
+FILE_PREVIEW_LIMIT = int(os.getenv("INGEST_FILE_PREVIEW_LIMIT", "200000"))
 
 
 class IngestRequest(BaseModel):
@@ -79,6 +83,13 @@ class IngestDocument(BaseModel):
 class IngestDocumentsResponse(BaseModel):
     documents: List[IngestDocument]
     total: int
+
+
+class IngestFileResponse(BaseModel):
+    path: str
+    content: str
+    media_type: str
+    truncated: bool = False
 
 
 class IngestRunSummary(BaseModel):
@@ -312,6 +323,35 @@ async def get_structured_document(
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="Structured file contains invalid JSON")
     return {"path": str(target.relative_to(get_repo_root() / "data" / "ingestion" / crawl_id)), "data": data}
+
+
+@router.get("/ingest/{crawl_id}/file", response_model=IngestFileResponse)
+async def get_ingest_file(
+    crawl_id: str,
+    path: str = Query(..., description="Relative path to ingestion file output"),
+):
+    """Return a text/markdown file from ingestion output."""
+    target = _resolve_ingestion_path(crawl_id, path)
+    if target.suffix.lower() not in FILE_PREVIEW_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type for preview")
+
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        content = target.read_text(encoding="utf-8", errors="ignore")
+
+    truncated = False
+    if FILE_PREVIEW_LIMIT > 0 and len(content) > FILE_PREVIEW_LIMIT:
+        content = content[:FILE_PREVIEW_LIMIT]
+        truncated = True
+
+    media_type = "text/markdown" if target.suffix.lower() == ".md" else "text/plain"
+    return IngestFileResponse(
+        path=str(target.relative_to(get_repo_root() / "data" / "ingestion" / crawl_id)),
+        content=content,
+        media_type=media_type,
+        truncated=truncated,
+    )
 
 
 @router.get("/ingest/{crawl_id}/download")
