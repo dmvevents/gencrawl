@@ -8,6 +8,7 @@ The Ingestion Gateway is a dedicated workspace for document intake, OCR selectio
 - Structured output preferences (JSONL, markdown, tables, entities).
 - Supported file formats and recent run summary.
 - Dedicated gateway app on port `4100` (decoupled from the main dashboard).
+- Recent runs table is backed by `/api/v1/ingest/runs`.
 
 ## Planned integrations
 - Email connectors: Outlook 365, Gmail (attachment + mailbox filters).

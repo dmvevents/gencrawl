@@ -21,6 +21,8 @@ import {
   disconnectIntegration,
   testIntegration,
   type IntegrationConfig,
+  fetchIngestRuns,
+  type IngestRunSummary,
 } from '@/lib/api'
 
 type IntegrationStatus = 'connected' | 'pending' | 'disconnected'
@@ -76,6 +78,7 @@ export default function GatewayPage() {
   const [integrationState, setIntegrationState] = useState<Record<string, IntegrationConfig>>({})
   const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationError, setIntegrationError] = useState<string | null>(null)
+  const [recentRuns, setRecentRuns] = useState<IngestRunSummary[]>([])
 
   const statusLabel = useMemo(
     () => ({
@@ -105,6 +108,7 @@ export default function GatewayPage() {
 
   useEffect(() => {
     loadIntegrations()
+    fetchIngestRuns(5).then(setRecentRuns).catch(() => setRecentRuns([]))
   }, [])
 
   const handleConnect = async (id: string) => {
@@ -355,18 +359,22 @@ export default function GatewayPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--gc-border)]">
-                {[
-                  { id: 'SEA-2026-01', source: 'Web Uploads', docs: 42, status: 'Completed' },
-                  { id: 'SEA-2026-02', source: 'S3 / Object Storage', docs: 120, status: 'Queued' },
-                  { id: 'CXC-2025-04', source: 'API Intake', docs: 18, status: 'Ingesting' },
-                ].map((row) => (
-                  <tr key={row.id}>
-                    <td className="px-4 py-3 text-[var(--gc-ink)]">{row.id}</td>
-                    <td className="px-4 py-3 text-[var(--gc-muted)]">{row.source}</td>
-                    <td className="px-4 py-3 text-[var(--gc-muted)]">{row.docs}</td>
-                    <td className="px-4 py-3 text-[var(--gc-muted)]">{row.status}</td>
+                {recentRuns.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-xs text-[var(--gc-muted)]">
+                      No ingestion runs yet.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  recentRuns.map((run) => (
+                    <tr key={run.crawl_id}>
+                      <td className="px-4 py-3 text-[var(--gc-ink)]">{run.crawl_id.slice(0, 8)}</td>
+                      <td className="px-4 py-3 text-[var(--gc-muted)]">{run.output?.structured_root ? 'Ingestion' : 'Unknown'}</td>
+                      <td className="px-4 py-3 text-[var(--gc-muted)]">{run.counts?.ingested ?? '-'}</td>
+                      <td className="px-4 py-3 text-[var(--gc-muted)]">{run.status}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

@@ -367,6 +367,10 @@ export const ingestApi = {
     api.get<IngestStructuredResponse>(
       `${API_ENDPOINTS.ingestStructured(crawlId)}?path=${encodeURIComponent(path)}`
     ),
+  listRuns: (limit?: number) => {
+    const query = limit ? `?limit=${limit}` : '';
+    return api.get<IngestRunsResponse>(`${API_ENDPOINTS.ingestRuns}${query}`);
+  },
 };
 
 // =============================================================================
@@ -738,6 +742,20 @@ export interface IngestDocumentsResponse {
 export interface IngestStructuredResponse {
   path: string;
   data: any;
+}
+
+export interface IngestRunSummary {
+  crawl_id: string;
+  status: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  counts?: Record<string, any> | null;
+  output?: Record<string, any> | null;
+}
+
+export interface IngestRunsResponse {
+  runs: IngestRunSummary[];
+  total: number;
 }
 
 export interface DocumentsResponse {

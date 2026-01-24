@@ -15,7 +15,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
-import { integrationsApi, IntegrationConfig } from '@/lib/api/client'
+import { integrationsApi, ingestApi, IntegrationConfig, IngestRunSummary } from '@/lib/api/client'
 
 type IntegrationStatus = 'connected' | 'pending' | 'disconnected'
 
@@ -70,6 +70,7 @@ export default function IngestionGatewayPage() {
   const [integrationState, setIntegrationState] = useState<Record<string, IntegrationConfig>>({})
   const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationError, setIntegrationError] = useState<string | null>(null)
+  const [recentRuns, setRecentRuns] = useState<IngestRunSummary[]>([])
 
   const statusLabel = useMemo(
     () => ({
@@ -135,6 +136,7 @@ export default function IngestionGatewayPage() {
 
   useEffect(() => {
     loadIntegrations()
+    ingestApi.listRuns(5).then((resp) => setRecentRuns(resp.runs)).catch(() => setRecentRuns([]))
   }, [])
 
   return (
@@ -356,18 +358,22 @@ export default function IngestionGatewayPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--gc-border)]">
-                {[
-                  { id: 'SEA-2026-01', source: 'Web Uploads', docs: 42, status: 'Completed' },
-                  { id: 'SEA-2026-02', source: 'S3 / Object Storage', docs: 120, status: 'Queued' },
-                  { id: 'CXC-2025-04', source: 'API Intake', docs: 18, status: 'Ingesting' },
-                ].map((row) => (
-                  <tr key={row.id}>
-                    <td className="px-4 py-3 text-[var(--gc-ink)]">{row.id}</td>
-                    <td className="px-4 py-3 text-[var(--gc-muted)]">{row.source}</td>
-                    <td className="px-4 py-3 text-[var(--gc-muted)]">{row.docs}</td>
-                    <td className="px-4 py-3 text-[var(--gc-muted)]">{row.status}</td>
+                {recentRuns.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-xs text-[var(--gc-muted)]">
+                      No ingestion runs yet.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  recentRuns.map((run) => (
+                    <tr key={run.crawl_id}>
+                      <td className="px-4 py-3 text-[var(--gc-ink)]">{run.crawl_id.slice(0, 8)}</td>
+                      <td className="px-4 py-3 text-[var(--gc-muted)]">{run.output?.structured_root ? 'Ingestion' : 'Unknown'}</td>
+                      <td className="px-4 py-3 text-[var(--gc-muted)]">{run.counts?.ingested ?? '-'}</td>
+                      <td className="px-4 py-3 text-[var(--gc-muted)]">{run.status}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

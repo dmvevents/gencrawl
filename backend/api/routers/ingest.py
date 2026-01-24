@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import time
 from pathlib import Path
+from datetime import datetime
 import json
 
 from utils.ingestion import ingest_crawl_from_logs, curate_ingestion_output
@@ -80,12 +81,46 @@ class IngestDocumentsResponse(BaseModel):
     total: int
 
 
+class IngestRunSummary(BaseModel):
+    crawl_id: str
+    status: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    counts: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+
+
+class IngestRunsResponse(BaseModel):
+    runs: List[IngestRunSummary]
+    total: int
+
+
 def _load_manifest(crawl_id: str) -> Optional[Dict[str, Any]]:
     manifest_path = get_repo_root() / "data" / "ingestion" / crawl_id / "manifest.json"
     if not manifest_path.exists():
         return None
     with open(manifest_path, "r") as handle:
         return json.load(handle)
+
+
+def _load_async_status(crawl_id: str) -> Optional[Dict[str, Any]]:
+    status_path = _ingest_status_path(crawl_id)
+    if not status_path.exists():
+        return None
+    try:
+        return json.loads(status_path.read_text())
+    except json.JSONDecodeError:
+        return None
+
+
+def _normalize_timestamp(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.utcfromtimestamp(value).isoformat() + "Z"
+    if isinstance(value, str):
+        return value
+    return None
 
 
 def _ingest_status_path(crawl_id: str) -> Path:
@@ -193,6 +228,49 @@ async def get_ingest_status(crawl_id: str):
     if not manifest:
         raise HTTPException(status_code=404, detail="Ingestion manifest not found")
     return manifest
+
+
+@router.get("/ingest/runs", response_model=IngestRunsResponse)
+async def list_ingest_runs(limit: int = Query(20, ge=1, le=200)):
+    """List recent ingestion runs."""
+    ingest_root = get_repo_root() / "data" / "ingestion"
+    if not ingest_root.exists():
+        return IngestRunsResponse(runs=[], total=0)
+
+    runs: List[IngestRunSummary] = []
+    for entry in ingest_root.iterdir():
+        if not entry.is_dir():
+            continue
+        crawl_id = entry.name
+        manifest = _load_manifest(crawl_id)
+        status = _load_async_status(crawl_id)
+        if not manifest and not status:
+            continue
+        created_at = None
+        updated_at = None
+        counts = None
+        output = None
+        status_value = "unknown"
+        if status:
+            status_value = status.get("status") or status_value
+            updated_at = _normalize_timestamp(status.get("completed_at") or status.get("started_at"))
+        if manifest:
+            created_at = _normalize_timestamp(manifest.get("created_at") or created_at)
+            counts = manifest.get("counts")
+            output = manifest.get("output")
+        runs.append(
+            IngestRunSummary(
+                crawl_id=crawl_id,
+                status=status_value,
+                created_at=created_at,
+                updated_at=updated_at,
+                counts=counts,
+                output=output,
+            )
+        )
+
+    runs.sort(key=lambda run: run.updated_at or run.created_at or "", reverse=True)
+    return IngestRunsResponse(runs=runs[:limit], total=len(runs))
 
 
 @router.get("/ingest/{crawl_id}/documents", response_model=IngestDocumentsResponse)
