@@ -58,6 +58,8 @@ Generate a JSON configuration with:
     "date_range": ["2020-01-01", "2025-12-31"],
     "file_types": ["pdf"],
     "keywords": ["mathematics"],
+    "document_types": ["past_paper", "mark_scheme", "syllabus"],
+    "exclude_document_types": ["newsletter", "notice"],
     "exclude_patterns": ["/blog/"]
   }},
   "extraction": {{
@@ -321,6 +323,7 @@ Generate only valid JSON, no extra text."""
         file_types = self._extract_file_types(query_lower)
         keywords = self._extract_keywords(user_query)
         taxonomy_hints = self._infer_taxonomy_hints(query_lower)
+        doc_types = self._infer_doc_types(query_lower)
 
         config: Dict[str, Any] = {
             "targets": targets,
@@ -354,6 +357,8 @@ Generate only valid JSON, no extra text."""
             config["filters"]["file_types"] = file_types
         if keywords:
             config["filters"]["keywords"] = keywords
+        if doc_types:
+            config["filters"]["document_types"] = doc_types
         if not config["filters"]:
             config.pop("filters", None)
 
@@ -421,3 +426,21 @@ Generate only valid JSON, no extra text."""
                 break
 
         return hints
+
+    def _infer_doc_types(self, query_lower: str) -> List[str]:
+        doc_types: List[str] = []
+        if "past paper" in query_lower or "past papers" in query_lower:
+            doc_types.append("past_paper")
+        if "practice" in query_lower or "mock" in query_lower or "sample paper" in query_lower:
+            doc_types.append("practice")
+        if "mark scheme" in query_lower or "marking scheme" in query_lower:
+            doc_types.append("mark_scheme")
+        if "syllabus" in query_lower:
+            doc_types.append("syllabus")
+        if "curriculum" in query_lower or "scheme of work" in query_lower:
+            doc_types.append("curriculum")
+        if "test" in query_lower or "exam" in query_lower:
+            doc_types.extend(["past_paper", "practice"])
+        if "registration" in query_lower:
+            doc_types.append("registration")
+        return list(dict.fromkeys(doc_types))

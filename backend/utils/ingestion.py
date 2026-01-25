@@ -12,7 +12,7 @@ import socket
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 from utils.paths import get_log_dir, get_repo_root
@@ -64,6 +64,32 @@ EXAM_KEYWORDS = {
     "cxc": ["cxc", "caribbean examinations council"],
 }
 
+DOC_TYPE_ALIASES = {
+    "past paper": "past_paper",
+    "past papers": "past_paper",
+    "specimen paper": "past_paper",
+    "specimen papers": "past_paper",
+    "mark scheme": "mark_scheme",
+    "mark schemes": "mark_scheme",
+    "markscheme": "mark_scheme",
+    "practice": "practice",
+    "practice test": "practice",
+    "practice tests": "practice",
+    "sample paper": "practice",
+    "sample papers": "practice",
+    "mock": "practice",
+    "curriculum": "curriculum",
+    "syllabus": "syllabus",
+    "registration": "registration",
+    "registration notice": "registration",
+    "notice": "notice",
+    "newsletter": "newsletter",
+    "results": "results",
+    "timetable": "timetable",
+    "guidance": "guidance",
+    "report": "report",
+}
+
 
 def _detect_keyword(value: str, keyword_map: Dict[str, List[str]]) -> Optional[str]:
     lowered = value.lower()
@@ -82,6 +108,22 @@ def _extract_year(value: str) -> Optional[int]:
         return int(year_match.group(0))
     year_match = YEAR_PATTERN.search(value)
     return int(year_match.group(0)) if year_match else None
+
+
+def _normalize_doc_type(value: Optional[str]) -> str:
+    if not value:
+        return "document"
+    lowered = str(value).strip().lower()
+    return DOC_TYPE_ALIASES.get(lowered, lowered)
+
+
+def _normalize_doc_types(values: Iterable[str]) -> List[str]:
+    normalized: List[str] = []
+    for value in values:
+        if not value:
+            continue
+        normalized.append(_normalize_doc_type(value))
+    return list(dict.fromkeys(normalized))
 
 
 def _slugify(value: Optional[str]) -> str:
@@ -1109,6 +1151,24 @@ def ingest_crawl_from_logs(
     }
 
     default_structure = "region/program/level/subject/year/document_type/"
+    filters = config.get("filters") or {}
+    allow_doc_types = _normalize_doc_types(
+        filters.get("document_types")
+        or filters.get("document_type_allowlist")
+        or filters.get("doc_types")
+        or []
+    )
+    block_doc_types = _normalize_doc_types(
+        filters.get("exclude_document_types")
+        or filters.get("document_type_blocklist")
+        or filters.get("exclude_doc_types")
+        or []
+    )
+    filter_stats = {
+        "doc_type_allowlist": 0,
+        "doc_type_blocklist": 0,
+    }
+
     output_structure = config.get("output", {}).get("structure") or default_structure
     output_tokens = [token for token in output_structure.strip("/").split("/") if token]
     if "program" not in output_tokens or "region" not in output_tokens:
@@ -1150,6 +1210,15 @@ def ingest_crawl_from_logs(
             seen_urls.add(url)
             title = doc.get("title", "Untitled Document")
             taxonomy = _infer_taxonomy(title, url, config)
+            doc_type_value = _normalize_doc_type(doc.get("document_type") or taxonomy.get("document_type"))
+            taxonomy["document_type"] = doc_type_value
+            doc["document_type"] = doc_type_value
+            if allow_doc_types and doc_type_value not in allow_doc_types:
+                filter_stats["doc_type_allowlist"] += 1
+                continue
+            if block_doc_types and doc_type_value in block_doc_types:
+                filter_stats["doc_type_blocklist"] += 1
+                continue
             domain = urlparse(url).netloc if url else None
             source_page = doc.get("source_page")
             source_meta: Dict[str, Any] = {}
@@ -1375,6 +1444,11 @@ def ingest_crawl_from_logs(
             "manifest": str(manifest_path),
             "structured_root": str(structured_root),
         },
+        "filters": {
+            "document_types": allow_doc_types or None,
+            "exclude_document_types": block_doc_types or None,
+        },
+        "filter_stats": filter_stats,
         "counts": {
             "ingested": ingested,
             "duplicates": duplicates,

@@ -23,6 +23,32 @@ def _discovery_user_agent() -> str:
 USER_AGENT = "GenCrawl/1.0 (+https://gencrawl.local)"
 CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 
+DOC_TYPE_ALIASES = {
+    "past paper": "past_paper",
+    "past papers": "past_paper",
+    "specimen paper": "past_paper",
+    "specimen papers": "past_paper",
+    "mark scheme": "mark_scheme",
+    "mark schemes": "mark_scheme",
+    "markscheme": "mark_scheme",
+    "practice": "practice",
+    "practice test": "practice",
+    "practice tests": "practice",
+    "sample paper": "practice",
+    "sample papers": "practice",
+    "mock": "practice",
+    "curriculum": "curriculum",
+    "syllabus": "syllabus",
+    "registration": "registration_notice",
+    "registration notice": "registration_notice",
+    "notice": "notice",
+    "newsletter": "newsletter",
+    "results": "results",
+    "timetable": "timetable",
+    "guidance": "guidance",
+    "report": "report",
+}
+
 DEFAULT_DOMAIN_PROFILES: Dict[str, Dict[str, Any]] = {
     "www.cxc.org": {
         "allow_paths": ["/syllabus-downloads", "/specimen-papers", "/examinations", "/product", "/wp-content/uploads"],
@@ -304,6 +330,16 @@ def _normalize_keywords(keywords: Iterable[str]) -> List[str]:
     return list(dict.fromkeys(normalized))
 
 
+def _normalize_doc_types(types: Iterable[str]) -> List[str]:
+    normalized: List[str] = []
+    for value in types:
+        if not value:
+            continue
+        lowered = str(value).strip().lower()
+        normalized.append(DOC_TYPE_ALIASES.get(lowered, lowered))
+    return list(dict.fromkeys(normalized))
+
+
 def _matches_keywords(value: str, keywords: Iterable[str]) -> bool:
     tokens = _normalize_keywords(keywords)
     if not tokens:
@@ -366,6 +402,8 @@ def _document_type_from_url(url: str) -> str:
         return "curriculum"
     if "guide" in lowered and "curriculum" in lowered:
         return "curriculum"
+    if "practice" in lowered or "sample" in lowered or "mock" in lowered:
+        return "practice"
     if "past" in lowered and "paper" in lowered:
         return "past_paper"
     if "specimen" in lowered:
@@ -523,6 +561,18 @@ async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
     filters = config.get("filters") or {}
     file_types = filters.get("file_types") or []
     keywords = filters.get("keywords") or []
+    explicit_allow = _normalize_doc_types(
+        filters.get("document_types")
+        or filters.get("document_type_allowlist")
+        or filters.get("doc_types")
+        or []
+    )
+    explicit_block = _normalize_doc_types(
+        filters.get("exclude_document_types")
+        or filters.get("document_type_blocklist")
+        or filters.get("exclude_doc_types")
+        or []
+    )
     wp_media_overrides = filters.get("wp_media_mime_types") or []
     respect_robots = config.get("respect_robots_txt", True)
     subject_terms = _subject_terms_from_keywords(keywords)
@@ -531,6 +581,8 @@ async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
     program_terms.extend(_program_terms_from_keywords(keywords))
     program_terms = list(dict.fromkeys(program_terms))
     doc_type_allowlist = _doc_type_allowlist_from_keywords(keywords)
+    if explicit_allow:
+        doc_type_allowlist = explicit_allow
     domain_profiles = DEFAULT_DOMAIN_PROFILES.copy()
     overrides = config.get("domain_profiles") or {}
     for host, profile in overrides.items():
@@ -741,6 +793,9 @@ async def discover_documents(config: Dict[str, Any]) -> DiscoveryResult:
                 continue
             doc_type = _document_type_from_context(url, link_sources.get(url))
             if doc_type_allowlist and doc_type not in doc_type_allowlist:
+                skipped_urls += 1
+                continue
+            if explicit_block and doc_type in explicit_block:
                 skipped_urls += 1
                 continue
             wp_meta = wp_media_meta.get(url) or {}
